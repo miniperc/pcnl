@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PCNL Surgical Access, Auto-Solution & Haptic Simulator v4.0</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <span>PCNL SURGICAL SIMULATOR</span>
+    <span class="v-badge">v4.0 MODULAR</span>
+  </div>
+  <div class="top-bar">
+    <select id="caseSelect" title="Clinical Case">
+      <option value="0">Case 1: Standard Pelvic + Lower-Pole Stone (Hydronephrotic)</option>
+      <option value="1">Case 2: Branched Staghorn (Steep 52° Lower Neck — Dog-Leg Trap)</option>
+      <option value="2">Case 3: High Calyx Under 12th Rib (Subcostal Cephalad Triangulation)</option>
+      <option value="3">Case 4: Supracostal Upper-Pole Staghorn (11th–12th ICS Pleural Trap)</option>
+      <option value="4">Case 5: Morbid Obesity (10.5cm Depth) + Ant/Post Calyx Overlap</option>
+      <option value="5">Case 6: Horseshoe / Malrotated Kidney (Posteromedial Calyces)</option>
+    </select>
+
+    <select id="calyxSelect" title="Choose Target Posterior Calyx (Point A)">
+      <option value="lower_lat">Target: Lower-Lateral Post. Calyx</option>
+      <option value="lower_med">Target: Lower-Medial (Sub-Apical) Calyx</option>
+      <option value="middle">Target: Middle Posterior Calyx</option>
+      <option value="upper">Target: Upper-Pole Compound Calyx</option>
+    </select>
+
+    <select id="coachModeSelect" title="Technique Workflow Coach">
+      <option value="hybrid">Technique: Hybrid (0° Line + 30° Bull's Eye + 0° Depth)</option>
+      <option value="triangulation">Technique: Classic Biplanar Triangulation (0° + 30° Ceph)</option>
+      <option value="bullseye">Technique: Pure Bull's Eye (30° Ipsilateral Coaxial)</option>
+    </select>
+
+    <button id="autoPlayBtn" class="auto-btn" onclick="toggleAutoSolve()">▶ Auto-Solve (Slow Step-by-Step)</button>
+    <button onclick="stepAutoSolve(-1)" title="Previous Auto-Solution Step">⏮</button>
+    <button onclick="stepAutoSolve(1)" title="Next Auto-Solution Step">⏭</button>
+    <select id="autoSpeedSelect" title="Auto-Solution Speed" style="width:66px;">
+      <option value="0.55">0.5x Slow</option>
+      <option value="1.0" selected>1.0x Norm</option>
+      <option value="2.0">2.0x Fast</option>
+    </select>
+
+    <button id="soundBtn" class="active" onclick="toggleSound()" title="Tactile Pop Audio Clicks">Audio Pops: ON</button>
+    <button id="contFluoroBtn" class="active" onclick="toggleContFluoro()">Live Fluoro: ON</button>
+    <button id="pedalBtn" class="pedal" onmousedown="startPedal()" onmouseup="stopPedal()" onmouseleave="stopPedal()">
+      PEDAL [SPACE]
+    </button>
+    <span class="stat-pill" id="dosePill">0.0s | 0.00 mGy</span>
+  </div>
+</header>
+
+<div class="workspace">
+  <!-- COLUMN 1: C-ARM FLUOROSCOPY MONITOR -->
+  <div class="col">
+    <div class="card">
+      <div class="card-header">
+        <span>C-ARM FLUOROSCOPY (DRAG HUB TO AIM | SCROLL WHEEL = ADVANCE NEEDLE)</span>
+        <span id="cArmReadout" style="color:var(--accent);font-family:monospace;">Axial: +0° | Tilt: 0°</span>
+      </div>
+      <div class="canvas-box">
+        <canvas id="fluoroCanvas"></canvas>
+
+        <!-- Step-by-Step Auto-Solution Narration Overlay -->
+        <div class="narration-banner" id="narrationBanner">
+          <div class="narration-title">
+            <span id="narrationStepTitle">AUTO-SOLUTION STEP 1/8</span>
+            <span id="narrationTechLabel" style="color:#4ade80;">HYBRID TECHNIQUE</span>
+          </div>
+          <div class="narration-body" id="narrationBody">
+            Initializing step-by-step surgical walkthrough...
+          </div>
+        </div>
+
+        <div class="fluoro-toolbar">
+          <button onclick="setCArm(0,0)">0° AP</button>
+          <button onclick="setCArm(30,0)">30° Bull's Eye</button>
+          <button onclick="setCArm(0,30)">30° Ceph</button>
+          <button id="clampBtn" class="active" onclick="toggleClamp()" title="Hold needle with radiolucent clamp to prevent superficial gravity sag">
+            Radiolucent Clamp: ON
+          </button>
+          <button onclick="injectNeedleContrast()" title="Inject contrast through 18G needle">
+            Inject Contrast
+          </button>
+          <button onclick="clearBlush()" id="clearBlushBtn" style="display:none;border-color:#f59e0b;color:#fbbf24;">
+            Washout Blush
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- COLUMN 2: FLANK SURFACE MAP + 5-MODE DIAGNOSTIC WORKBENCH -->
+  <div class="col">
+    <div class="card" style="flex: 0.88;">
+      <div class="card-header">
+        <span>PRONE FLANK MAP (CLICK CALYX = POINT A | DRAG ORANGE DOT = POINT B)</span>
+        <div style="display:flex;gap:4px;">
+          <button onclick="markPointA()" style="padding:2px 6px;font-size:10px;">1. Mark 0° Line</button>
+          <button onclick="autoTrigPointB()" style="padding:2px 6px;font-size:10px;">2. Snap Optimal Point B</button>
+        </div>
+      </div>
+      <div class="canvas-box">
+        <canvas id="skinCanvas"></canvas>
+      </div>
+    </div>
+
+    <div class="card" style="flex: 1.12;">
+      <div class="card-header">
+        <div style="display:flex;gap:3px;flex-wrap:wrap;">
+          <button id="wbTab1" class="active" onclick="setWorkbench('anatomy')" style="padding:2px 6px;font-size:10px;">1. Anatomy & Dog-Leg</button>
+          <button id="wbTab5" onclick="setWorkbench('compare')" style="padding:2px 6px;font-size:10px;border-color:#38bdf8;color:#7dd3fc;">2. Technique Impact</button>
+          <button id="wbTab2" onclick="setWorkbench('ultrasound')" style="padding:2px 6px;font-size:10px;">3. Ultrasound</button>
+          <button id="wbTab3" onclick="setWorkbench('wire')" style="padding:2px 6px;font-size:10px;">4. Wire & Kumpe</button>
+          <button id="wbTab4" onclick="setWorkbench('dilation')" style="padding:2px 6px;font-size:10px;">5. Dilation & Torque</button>
+        </div>
+        <span id="tissueBadge" style="color:#fbbf24;font-family:monospace;font-size:10.5px;">0mm: On Skin Surface</span>
+      </div>
+      <div class="canvas-box">
+        <canvas id="benchCanvas"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- COLUMN 3: 3-STAGE SURGICAL CONTROL DECK -->
+  <div class="sidebar">
+    <div class="coach-card">
+      <div class="coach-head">
+        <span style="font-size:10.5px;font-weight:700;color:var(--accent);" id="coachHeader">OPERATIVE CHECKLIST</span>
+        <div style="display:flex;gap:4px;">
+          <button onclick="toggleBlind()" id="blindBtn" style="padding:1px 5px;font-size:9.5px;">OR Blind: OFF</button>
+          <button onclick="resetCase()" style="padding:1px 6px;font-size:10px;">Reset (0mm)</button>
+        </div>
+      </div>
+      <ul class="coach-list" id="coachList"></ul>
+    </div>
+
+    <!-- Haptic Tissue Resistance & Pop Feel Meter -->
+    <div class="haptic-bar-wrap">
+      <div style="display:flex;justify-content:space-between;font-size:10.5px;">
+        <span id="hapticLayerText" style="font-weight:700;color:#7dd3fc;">HAPTIC FEEL: Resting on Skin (Point B)</span>
+        <span id="hapticForceVal" style="font-family:monospace;color:#fde047;">0.0 N</span>
+      </div>
+      <div class="haptic-track">
+        <div class="haptic-fill" id="hapticFill"></div>
+      </div>
+    </div>
+
+    <div class="stage-tabs">
+      <button id="stBtn1" class="active" onclick="setStage(1)">STAGE 1: PUNCTURE</button>
+      <button id="stBtn2" onclick="setStage(2)">STAGE 2: WIRE/KMP</button>
+      <button id="stBtn3" onclick="setStage(3)">STAGE 3: DILATE</button>
+    </div>
+
+    <!-- STAGE 1 PANEL -->
+    <div class="ctrl-panel visible" id="stage1Panel">
+      <div class="sec-label">
+        <span>C-Arm Gantry & Pyelogram</span>
+        <span style="color:var(--text-muted);font-weight:400;">[Q=0° | E=30°]</span>
+      </div>
+      <div class="sl-row">
+        <div class="sl-head"><span>Axial Rotation (Ipsilateral +)</span><span class="sl-val" id="vAx">+0°</span></div>
+        <input type="range" id="sAx" min="-15" max="45" step="1" value="0">
+      </div>
+      <div class="sl-row">
+        <div class="sl-head"><span>Cranial-Caudal Tilt (Cephalad +)</span><span class="sl-val" id="vOb">0°</span></div>
+        <input type="range" id="sOb" min="-30" max="30" step="1" value="0">
+      </div>
+      <div class="grid-3">
+        <button id="btnAir" onclick="toggleAir()">5mL Air Bolus</button>
+        <button id="btnHydro" onclick="toggleHydro()">Saline Distend</button>
+        <button id="btnResp" onclick="cycleResp()">Resp: Insp Hold</button>
+      </div>
+
+      <div class="sec-label" style="margin-top:3px;">
+        <span>18G Needle Geometry (Starts at 0mm Skin)</span>
+        <span id="trigHint" style="color:#7dd3fc;font-family:monospace;">Tract: 78mm</span>
+      </div>
+      <div class="sl-row">
+        <div class="sl-head"><span>Lateral Skin Offset L (from Point A)</span><span class="sl-val" id="vLat">4.0 cm</span></div>
+        <input type="range" id="sLat" min="1.5" max="8.0" step="0.1" value="4.0">
+      </div>
+      <div class="sl-row">
+        <div class="sl-head"><span>Cephalocaudal Skin Offset (Caudal -)</span><span class="sl-val" id="vCC">-1.6 cm</span></div>
+        <input type="range" id="sCC" min="-6.0" max="3.5" step="0.1" value="-1.6">
+      </div>
+      <div class="sl-row">
+        <div class="sl-head"><span>Coronal Aim Angle (Plane 1 Direction)</span><span class="sl-val" id="vCor">22.0°</span></div>
+        <input type="range" id="sCor" min="-45" max="65" step="0.5" value="22">
+      </div>
+      <div class="sl-row">
+        <div class="sl-head"><span>Needle Pitch Angle (from Vertical AP) [←/→]</span><span class="sl-val" id="vPitch">30.5°</span></div>
+        <input type="range" id="sPitch" min="10" max="60" step="0.5" value="30.5">
+      </div>
+      <div class="sl-row">
+        <div class="sl-head"><span>Needle Advancement Along Tract [↑/↓ or Scroll]</span><span class="sl-val" id="vDepth">0 mm (Skin)</span></div>
+        <input type="range" id="sDepth" min="0" max="135" step="1" value="0">
+        <div class="grid-4" style="margin-top:2px;">
+          <button onclick="setExactDepth(0)" title="Place tip on skin at Point B">0mm Skin</button>
+          <button onclick="setExactDepth(3)" title="Puncture skin dermis">3mm Dermis</button>
+          <button onclick="jumpToFascia()" title="Advance to Lumbodorsal Fascia (1st Pop)">1st Pop (Fascia)</button>
+          <button onclick="stepDepth(5)">+5mm Push</button>
+        </div>
+      </div>
+      <div class="grid-2" style="margin-top:3px;">
+        <button style="background:#1d4ed8;border-color:#3b82f6;font-weight:700;" onclick="pullStylet()">
+          1. Pull Stylet (Efflux)
+        </button>
+        <button style="background:#15803d;border-color:#22c55e;font-weight:700;" onclick="goToWireStage()">
+          2. Steer Guidewire →
+        </button>
+      </div>
+    </div>
+
+    <!-- STAGE 2 PANEL -->
+    <div class="ctrl-panel" id="stage2Panel">
+      <div class="sec-label">
+        <span>Active 0.035" Angled Terumo Steering</span>
+        <span id="sweetSpotHint" style="color:#4ade80;font-family:monospace;">Target Torque: ~180°</span>
+      </div>
+      <div class="sl-row">
+        <div class="sl-head"><span>Terumo Tip Torque Vise Rotation (0°–360°)</span><span class="sl-val" id="vTorque">90°</span></div>
+        <input type="range" id="sTorque" min="0" max="360" step="5" value="90">
+      </div>
+      <div class="sl-row">
+        <div class="sl-head"><span>Advance Hydrophilic Guidewire</span><span class="sl-val" id="vWireAdv">0 mm</span></div>
+        <input type="range" id="sWireAdv" min="0" max="100" step="1" value="0">
+        <div class="grid-3" style="margin-top:2px;">
+          <button onclick="stepWire(-10)">Retract -10mm</button>
+          <button onclick="stepWire(10)">Advance +10mm</button>
+          <button onclick="autoSteerTerumo()">Auto-Torque Tip</button>
+        </div>
+      </div>
+
+      <div class="sec-label" style="margin-top:5px;">
+        <span>Catheter Backup & Stiff Wire Exchange</span>
+      </div>
+      <div class="grid-2">
+        <button id="btnKumpe" onclick="toggleKumpe()">1. Advance 5Fr Kumpe</button>
+        <button id="btnStiff" onclick="exchangeStiffWire()">2. Swap Super Stiff Wire</button>
+      </div>
+      <button style="background:#15803d;border-color:#22c55e;font-weight:700;margin-top:4px;" onclick="setStage(3)">
+        Proceed to Stage 3: Tract Dilation →
+      </button>
+    </div>
+
+    <!-- STAGE 3 PANEL -->
+    <div class="ctrl-panel" id="stage3Panel">
+      <div class="sec-label">
+        <span>Coaxial Tract Dilation (Alken + Amplatz)</span>
+        <span id="needlePitchRef" style="color:#7dd3fc;font-family:monospace;">Needle Pitch: 30.5°</span>
+      </div>
+      <div class="sl-row">
+        <div class="sl-head">
+          <span>Dilator Entry Pitch Angle (Match Needle!)</span>
+          <span class="sl-val" id="vDilPitch">30.5°</span>
+        </div>
+        <input type="range" id="sDilPitch" min="10" max="60" step="0.5" value="30.5">
+      </div>
+      <div class="sl-row">
+        <div class="sl-head"><span>Alken Guide Rod & Telescopic Dilators</span><span class="sl-val" id="vRod">0 mm</span></div>
+        <input type="range" id="sRod" min="0" max="125" step="1" value="0">
+      </div>
+      <div class="sl-row">
+        <div class="sl-head"><span>24 Fr Amplatz Renal Sheath Depth</span><span class="sl-val" id="vSheath">0 mm</span></div>
+        <input type="range" id="sSheath" min="0" max="125" step="1" value="0">
+      </div>
+      <button onclick="matchDilatorAngle()" style="font-size:10.5px;">
+        Align Dilator Coaxial with Guidewire Vector
+      </button>
+
+      <div class="sec-label" style="margin-top:5px;">
+        <span>24 Fr Rigid Nephroscope Sweep</span>
+      </div>
+      <div class="sl-row">
+        <div class="sl-head"><span>Nephroscope Leverage / Sweep Angle</span><span class="sl-val" id="vScopeSweep">0° (Neutral)</span></div>
+        <input type="range" id="sScopeSweep" min="-35" max="35" step="1" value="0">
+      </div>
+      <div id="torqueScoreBox" style="font-size:10.8px;color:#cbd5e1;background:#060a10;padding:5px;border-radius:4px;border:1px solid #1e2d42;">
+        Park the 24 Fr Amplatz sheath inside the calyceal cup to evaluate rigid nephroscope reach and parenchymal torque.
+      </div>
+    </div>
+
+    <!-- Live Diagnostic Telemetry -->
+    <div class="telemetry-card">
+      <div class="badge-pill b-info" id="statusBadge">READY ON SKIN (0 MM)</div>
+      <div id="statusText">Needle tip is resting on the flank skin at Point B (0 mm). Click <b>▶ Auto-Solve</b> to watch a slow step-by-step walkthrough, or advance manually.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Auto-bust browser cache on every refresh so GitHub Pages updates appear immediately
+  const v = Date.now();
+  document.querySelector('link[rel="stylesheet"]').href = 'styles.css?v=' + v;
+  ['cases.js', 'physics.js', 'renderer.js'].forEach(src => {
+    const s = document.createElement('script');
+    s.src = src + '?v=' + v;
+    s.async = false; // preserve exact load order: cases -> physics -> renderer
+    document.body.appendChild(s);
+  });
+</script>
+</body>
+</html>
