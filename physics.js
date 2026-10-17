@@ -1871,3 +1871,153 @@ function updateDiagnosticsAndCoach() {
 
   requestAnimationFrame(postRenderOverlay);
 })();
+// ============================================================================
+// v5.1 UNASSISTED OR MODE (TRUE MANUAL POINT B, MANUAL AIM & HIDDEN SPOILERS)
+// Paste at the very bottom of physics.js
+// ============================================================================
+state.assistedMode = false; // Default to True Unassisted OR Mode!
+
+(function initUnassistedORMode() {
+  // 1. Inject "Unassisted OR vs Assisted" Toggle Button in Top Bar
+  const blindBtn = document.getElementById('blindBtn');
+  if (blindBtn && !document.getElementById('assistModeBtn')) {
+    const btn = document.createElement('button');
+    btn.id = 'assistModeBtn';
+    btn.style.borderColor = '#a855f7';
+    btn.style.color = '#e9d5ff';
+    btn.style.fontWeight = '600';
+    btn.onclick = toggleAssistedMode;
+    blindBtn.parentNode.insertBefore(btn, blindBtn);
+  }
+
+  function updateAssistButtonUI() {
+    const btn = document.getElementById('assistModeBtn');
+    const coaxBtn = document.getElementById('trueCoaxBtn');
+    if (btn) {
+      btn.textContent = state.assistedMode ? 'Mode: Assisted (Auto-Setup)' : 'Mode: Unassisted OR (Manual)';
+      btn.classList.toggle('active', !state.assistedMode);
+    }
+    if (coaxBtn) {
+      coaxBtn.style.display = state.assistedMode ? 'inline-block' : 'none';
+    }
+  }
+
+  window.toggleAssistedMode = function() {
+    state.assistedMode = !state.assistedMode;
+    updateAssistButtonUI();
+    initCase(state.caseIdx, true);
+  };
+
+  // 2. Override initCase so Unassisted Mode starts at neutral, unaligned coordinates
+  window.initCase = function(idx, keepCalyx = false) {
+    stopAutoSolve(true);
+    state.caseIdx = idx;
+    const c = CASES[idx];
+    if (!keepCalyx) {
+      state.targetKey = c.defaultCalyx;
+      document.getElementById('calyxSelect').value = state.targetKey;
+    }
+    const opt = computeOptimalGeometryForTechnique(state.coachMode);
+
+    if (state.assistedMode) {
+      // Assisted Mode: Pre-aligns Point B, Coronal Aim, Pitch & Respiration
+      state.respMode = opt.respMode;
+      state.latCm = opt.latCm;
+      state.ccCm = opt.ccCm;
+      state.corDeg = opt.corDeg;
+      state.pitchDeg = opt.pitchDeg;
+      state.dilPitchDeg = opt.pitchDeg;
+      state.pointAMarked = true;
+    } else {
+      // Unassisted OR Mode: Starts in Tidal breathing with a neutral, unaligned needle!
+      // Surgeon must manually lock respiration, place Point B, and aim Coronal & Pitch!
+      state.respMode = 'tidal';
+      state.latCm = 3.5;
+      state.ccCm = -1.0;
+      state.corDeg = 0.0;
+      state.pitchDeg = 22.0;
+      state.dilPitchDeg = 22.0;
+      state.pointAMarked = false;
+    }
+
+    const respLabels = { insp: 'Resp: Insp Hold', exp: 'Resp: Exp Hold', tidal: 'Resp: Tidal' };
+    document.getElementById('btnResp').textContent = respLabels[state.respMode];
+
+    state.cArmAx = 0;
+    state.cArmOb = 0;
+    state.depthMm = 0;
+
+    state.visited0AP = true;
+    state.visited30Ax = false;
+    state.visited30Ob = false;
+
+    state.blushClouds = [];
+    document.getElementById('clearBlushBtn').style.display = 'none';
+
+    state.styletPulled = false;
+    state.terumoTorqueDeg = 180;
+    state.wireAdvMm = 0;
+    state.wireInPelvis = false;
+    state.kumpeAdvanced = false;
+    state.stiffWireExchanged = false;
+
+    state.rodDepthMm = 0;
+    state.sheathDepthMm = 0;
+    state.wireKinked = false;
+    state.scopeSweepDeg = 0;
+    state.blindRevealed = false;
+    state.lihDirty = true;
+
+    document.getElementById('btnKumpe').classList.remove('active');
+    document.getElementById('btnStiff').classList.remove('active');
+    document.getElementById('narrationBanner').classList.remove('visible');
+
+    const coaxBtn = document.getElementById('trueCoaxBtn');
+    if (coaxBtn) {
+      coaxBtn.textContent = `◎ Calyx Axis (${opt.calyxAxDeg}°)`;
+    }
+
+    updateAssistButtonUI();
+    setStage(1);
+    syncAllUI();
+    updateDiagnosticsAndCoach();
+  };
+
+  // 3. Decouple Point B Drag from Auto-Aiming in Unassisted Mode!
+  window.movePointBOnSkin = function(wx, wy) {
+    const cal = getTargetCalyxBase();
+    const refX = cal.x;
+    const refY = cal.y + getPlannedRespShift();
+    state.latCm = Math.round(Math.max(0.5, Math.min(8.0, (wx - refX) / 10)) * 10) / 10;
+    state.ccCm = Math.round(Math.max(-6.0, Math.min(5.0, (wy - refY) / 10)) * 10) / 10;
+
+    // Only auto-rotate Coronal Aim if Assisted Mode is ON!
+    // In Unassisted OR Mode, moving Point B moves ONLY the skin entry site.
+    if (state.assistedMode) {
+      const dx = refX - (refX + state.latCm * 10);
+      const dy = refY - (refY + state.ccCm * 10);
+      state.corDeg = Math.round(Math.max(-75, Math.min(75, Math.atan2(dy, -dx) * 180 / Math.PI)) * 2) / 2;
+    }
+
+    state.lihDirty = true;
+    syncAllUI();
+    updateDiagnosticsAndCoach();
+  };
+
+  // 4. Hide Answer Spoilers (Ideal Pitch, Tract Length, Calyx Axis, & Torque Sweet Spot) in Unassisted Mode
+  const origSyncAllUI = window.syncAllUI;
+  window.syncAllUI = function() {
+    origSyncAllUI();
+    if (!state.assistedMode) {
+      document.getElementById('cArmReadout').textContent =
+        `Axial: ${state.cArmAx >= 0 ? '+' : ''}${Math.round(state.cArmAx)}° | Tilt: ${state.cArmOb >= 0 ? '+' : ''}${Math.round(state.cArmOb)}°`;
+      document.getElementById('trigHint').textContent = `Manual Mode (Use C-Arm Parallax)`;
+      const ssHint = document.getElementById('sweetSpotHint');
+      if (ssHint) ssHint.textContent = `Torque Vise (0°–360°)`;
+    }
+  };
+
+  // Initialize into Unassisted OR Mode immediately
+  updateAssistButtonUI();
+  initCase(state.caseIdx, true);
+})();
