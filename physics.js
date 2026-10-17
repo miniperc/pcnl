@@ -1,5 +1,5 @@
 // ============================================================================
-// PCNL SURGICAL SIMULATOR v5.0 — MASTER PHYSICS, GEOMETRY & OR REALISM ENGINE
+// PCNL SURGICAL SIMULATOR v5.2 — CLEAN MANUAL-DEFAULT PHYSICS & SOLVER ENGINE
 // ============================================================================
 const lihCanvas = document.createElement('canvas');
 const lihCtx = lihCanvas.getContext('2d');
@@ -13,9 +13,8 @@ const bCtx = benchCanvas.getContext('2d');
 fluoroCanvas.style.touchAction = 'none';
 skinCanvas.style.touchAction = 'none';
 
-// Additional v5.0 state properties
-state.wireType = 'terumo'; // 'terumo' (Angled Hydrophilic) or 'jtip' (Standard PTFE J-Tip)
-state.doseRateMultiplier = 1.0;
+state.wireType = 'terumo';
+state.assistedSnapped = false; // False = Manual OR Mode (Default); True only when user clicks "Snap Optimal Point B"
 
 function getTargetCalyxBase() {
   return CASES[state.caseIdx].calyces[state.targetKey];
@@ -27,12 +26,10 @@ function getRespShift() {
   return Math.sin(state.tidalPhase) * 8;
 }
 
-// Compute the reference respiratory shift at which Point A/B were planned
 function getPlannedRespShift() {
   const cal = getTargetCalyxBase();
   if (state.respMode === 'insp') return -8;
   if (state.respMode === 'exp') return +8;
-  // During tidal breathing, Point B stays anchored on the chest wall at the optimal hold position
   return cal.supracostal ? +8 : -8;
 }
 
@@ -69,6 +66,75 @@ function getInfundibularUnitVector(cal) {
   const len = Math.hypot(vx, vy, vz) || 1;
   return { x: vx / len, y: vy / len, z: vz / len };
 }
+
+// ============================================================================
+// ANATOMICAL CALIBRATION OF CASES (REALISTIC AXIAL & CORONAL DIVERSITY)
+// ============================================================================
+(function calibrateAnatomicalCases() {
+  const sLat = document.getElementById('sLat');
+  const sCC  = document.getElementById('sCC');
+  const sCor = document.getElementById('sCor');
+  if (sLat) { sLat.min = "0.5"; sLat.max = "8.0"; }
+  if (sCC)  { sCC.min = "-6.0"; sCC.max = "5.0"; }
+  if (sCor) { sCor.min = "-75";  sCor.max = "75"; }
+
+  const axialProfileByCase = [
+    { lower_lat: 30, lower_med: 20, middle: 28, upper: 16 }, // Case 1: Standard Brödel Kidney
+    { lower_lat: 38, lower_med: 22, middle: 32, upper: 18 }, // Case 2: Hodson Branched Staghorn
+    { lower_lat: 26, lower_med: 18, middle: 28, upper: 15 }, // Case 3: Subcostal Rib-Blocked
+    { lower_lat: 28, lower_med: 20, middle: 26, upper: 16 }, // Case 4: Supracostal Upper-Pole
+    { lower_lat: 40, lower_med: 24, middle: 34, upper: 18 }, // Case 5: Obese Deep Tract (108mm)
+    { lower_lat: 16, lower_med: 12, middle: 14, upper: 12 }  // Case 6: Malrotated Horseshoe Kidney
+  ];
+
+  CASES.forEach((c, idx) => {
+    if (c.calyces.upper && idx !== 5) {
+      c.calyces.upper.x = c.pelvis.x + 25;
+      c.calyces.upper.y = c.rib12Y + 6;
+      c.calyces.upper.supracostal = true;
+    }
+
+    const pel = c.pelvis;
+    const axMap = axialProfileByCase[idx] || axialProfileByCase[0];
+    Object.keys(c.calyces).forEach(k => {
+      const cal = c.calyces[k];
+      if (axMap[k] !== undefined) cal.axialDeg = axMap[k];
+
+      const dx = cal.x - pel.x;
+      const dy = pel.y - cal.y;
+      cal.coronalDeg = Math.round(Math.atan2(dy, dx) * 180 / Math.PI * 2) / 2;
+    });
+  });
+
+  // Make PEDAL button work smoothly on mobile touch-and-hold
+  const pedalBtn = document.getElementById('pedalBtn');
+  if (pedalBtn) {
+    pedalBtn.style.touchAction = 'none';
+    pedalBtn.addEventListener('pointerdown', e => { e.preventDefault(); startPedal(); });
+    pedalBtn.addEventListener('pointerup', e => { e.preventDefault(); stopPedal(); });
+    pedalBtn.addEventListener('pointercancel', () => stopPedal());
+  }
+
+  // Inject Error Scenario Selector next to Auto-Solve
+  const autoBtn = document.getElementById('autoPlayBtn');
+  if (autoBtn && !document.getElementById('errorScenarioSelect')) {
+    const sel = document.createElement('select');
+    sel.id = 'errorScenarioSelect';
+    sel.style.borderColor = '#f59e0b';
+    sel.style.color = '#fde047';
+    sel.style.fontWeight = '600';
+    sel.innerHTML = `
+      <option value="auto_smart">Auto-Solve: Smart (Fixes Your Current Position or Ideal)</option>
+      <option value="ideal">Auto-Solve: Ideal Textbook Trajectory</option>
+      <option value="err_shallow">Demo Fix 1: Too Shallow / Posterior (Superficial Pass)</option>
+      <option value="err_deep">Demo Fix 2: Too Deep / Anterior (Deep Overshoot Pass)</option>
+      <option value="err_coronal">Demo Fix 3: Out-of-Plane Coronal Drift (Off 0° Line / Dog-Leg)</option>
+      <option value="err_bullseye">Demo Fix 4: Bull's Eye Coaxial Drift (Shaft Line → Dot Fix)</option>
+    `;
+    sel.addEventListener('change', () => stopAutoSolve(true));
+    autoBtn.parentNode.insertBefore(sel, autoBtn);
+  }
+})();
 
 function computeOptimalGeometryForTechnique(techMode) {
   const cal = getTargetCalyxBase();
@@ -131,6 +197,9 @@ function computeOptimalGeometryForTechnique(techMode) {
   };
 }
 
+// ============================================================================
+// CASE INITIALIZATION — STARTS IN UNASSISTED MANUAL MODE BY DEFAULT!
+// ============================================================================
 function initCase(idx, keepCalyx = false) {
   stopAutoSolve(true);
   state.caseIdx = idx;
@@ -139,19 +208,22 @@ function initCase(idx, keepCalyx = false) {
     state.targetKey = c.defaultCalyx;
     document.getElementById('calyxSelect').value = state.targetKey;
   }
-  const opt = computeOptimalGeometryForTechnique(state.coachMode);
 
-  state.respMode = opt.respMode;
+  // DEFAULT MANUAL OR START:
+  // Does NOT auto-aim or auto-place Point B! Starts in Tidal respiration at neutral flank coordinates.
+  state.assistedSnapped = false;
+  state.pointAMarked = false;
+  state.respMode = 'tidal';
   const respLabels = { insp: 'Resp: Insp Hold', exp: 'Resp: Exp Hold', tidal: 'Resp: Tidal' };
   document.getElementById('btnResp').textContent = respLabels[state.respMode];
 
   state.cArmAx = 0;
   state.cArmOb = 0;
-  state.latCm = opt.latCm;
-  state.ccCm = opt.ccCm;
-  state.corDeg = opt.corDeg;
-  state.pitchDeg = opt.pitchDeg;
-  state.dilPitchDeg = opt.pitchDeg;
+  state.latCm = 3.5;
+  state.ccCm = -1.0;
+  state.corDeg = 0.0;
+  state.pitchDeg = 22.0;
+  state.dilPitchDeg = 22.0;
   state.depthMm = 0;
 
   state.visited0AP = true;
@@ -179,138 +251,12 @@ function initCase(idx, keepCalyx = false) {
   document.getElementById('btnStiff').classList.remove('active');
   document.getElementById('narrationBanner').classList.remove('visible');
 
-  const coaxBtn = document.getElementById('trueCoaxBtn');
-  if (coaxBtn) {
-    coaxBtn.textContent = `◎ Calyx Axis (${opt.calyxAxDeg}°)`;
-  }
-
   setStage(1);
   syncAllUI();
   updateDiagnosticsAndCoach();
 }
 
 function resetCase() { initCase(state.caseIdx, true); }
-
-// ============================================================================
-// UI INJECTIONS: ERROR SCENARIOS, TRUE COAXIAL BUTTON & WIRE TYPE SELECTOR
-// ============================================================================
-(function injectV50UIEnhancements() {
-  // 1. Expand Slider Ranges for Upper-Pole Medial & Steep Coronal Access
-  const sLat = document.getElementById('sLat');
-  const sCC  = document.getElementById('sCC');
-  const sCor = document.getElementById('sCor');
-  if (sLat) { sLat.min = "0.5"; sLat.max = "8.0"; }
-  if (sCC)  { sCC.min = "-6.0"; sCC.max = "5.0"; }
-  if (sCor) { sCor.min = "-75";  sCor.max = "75"; }
-
-  // 2. Inject Gold Error Scenario Selector in Top Bar
-  const autoBtn = document.getElementById('autoPlayBtn');
-  if (autoBtn && !document.getElementById('errorScenarioSelect')) {
-    const sel = document.createElement('select');
-    sel.id = 'errorScenarioSelect';
-    sel.title = 'Choose Textbook Run, Fix Your Current Needle Position, or Watch Classic Out-of-Plane Error Fixes';
-    sel.style.borderColor = '#f59e0b';
-    sel.style.color = '#fde047';
-    sel.style.fontWeight = '600';
-    sel.innerHTML = `
-      <option value="auto_smart">Auto-Solve: Smart (Fixes Your Current Position or Ideal)</option>
-      <option value="ideal">Auto-Solve: Ideal Textbook Trajectory</option>
-      <option value="err_shallow">Demo Fix 1: Too Shallow / Posterior (Superficial Pass)</option>
-      <option value="err_deep">Demo Fix 2: Too Deep / Anterior (Deep Overshoot Pass)</option>
-      <option value="err_coronal">Demo Fix 3: Out-of-Plane Coronal Drift (Off 0° Line / Dog-Leg)</option>
-      <option value="err_bullseye">Demo Fix 4: Bull's Eye Coaxial Drift (Shaft Line → Dot Fix)</option>
-    `;
-    sel.addEventListener('change', () => stopAutoSolve(true));
-    autoBtn.parentNode.insertBefore(sel, autoBtn);
-  }
-
-  // 3. Inject Patient-Specific "◎ Calyx Axis" Button next to Honest "30° Bull's Eye" Button
-  const clampBtn = document.getElementById('clampBtn');
-  if (clampBtn && !document.getElementById('trueCoaxBtn')) {
-    const coaxBtn = document.createElement('button');
-    coaxBtn.id = 'trueCoaxBtn';
-    coaxBtn.textContent = '◎ Calyx Axis';
-    coaxBtn.title = 'Rotate C-Arm to the exact anatomical axial & compound angle of this specific calyx';
-    coaxBtn.style.borderColor = '#38bdf8';
-    coaxBtn.style.color = '#7dd3fc';
-    coaxBtn.addEventListener('click', () => {
-      const coax = getExactCoaxialCArm(state.pitchDeg, state.corDeg);
-      setCArm(coax.ax, coax.ob);
-    });
-    clampBtn.parentNode.insertBefore(coaxBtn, clampBtn);
-  }
-
-  // 4. Inject Stage 2 Wire Type Selector (Angled Terumo vs Standard J-Tip)
-  const stage2Panel = document.getElementById('stage2Panel');
-  if (stage2Panel && !document.getElementById('wireTypeSelect')) {
-    const wrap = document.createElement('div');
-    wrap.style.marginBottom = '6px';
-    wrap.style.display = 'flex';
-    wrap.style.gap = '4px';
-    wrap.innerHTML = `
-      <button id="btnWireTerumo" class="active" style="flex:1;padding:4px;font-size:0.68rem;" onclick="setWireType('terumo')">0.035" Angled Terumo (Hydrophilic)</button>
-      <button id="btnWireJTip" style="flex:1;padding:4px;font-size:0.68rem;" onclick="setWireType('jtip')">0.035" Standard J-Tip (PTFE)</button>
-    `;
-    stage2Panel.insertBefore(wrap, stage2Panel.children[1]);
-  }
-
-  // 5. Make PEDAL button support mobile touch-and-hold seamlessly
-  const pedalBtn = document.getElementById('pedalBtn');
-  if (pedalBtn) {
-    pedalBtn.style.touchAction = 'none';
-    pedalBtn.addEventListener('pointerdown', e => { e.preventDefault(); startPedal(); });
-    pedalBtn.addEventListener('pointerup', e => { e.preventDefault(); stopPedal(); });
-    pedalBtn.addEventListener('pointercancel', () => stopPedal());
-  }
-})();
-
-window.setWireType = function(type) {
-  state.wireType = type;
-  const bT = document.getElementById('btnWireTerumo');
-  const bJ = document.getElementById('btnWireJTip');
-  if (bT && bJ) {
-    bT.classList.toggle('active', type === 'terumo');
-    bJ.classList.toggle('active', type === 'jtip');
-  }
-  state.lihDirty = true;
-  evaluateWireProgress();
-};
-
-// ============================================================================
-// ANATOMICAL CALIBRATION OF CASES (REALISTIC AXIAL & CORONAL DIVERSITY)
-// ============================================================================
-(function calibrateAnatomicalCases() {
-  // Realistic anatomical axial angles (Brödel vs Hodson vs Upper Pole vs Horseshoe)
-  const axialProfileByCase = [
-    { lower_lat: 30, lower_med: 20, middle: 28, upper: 16 }, // Case 1: Standard Brödel Kidney
-    { lower_lat: 38, lower_med: 22, middle: 32, upper: 18 }, // Case 2: Hodson Branched Staghorn
-    { lower_lat: 26, lower_med: 18, middle: 28, upper: 15 }, // Case 3: Subcostal Rib-Blocked
-    { lower_lat: 28, lower_med: 20, middle: 26, upper: 16 }, // Case 4: Supracostal Upper-Pole
-    { lower_lat: 40, lower_med: 24, middle: 34, upper: 18 }, // Case 5: Obese Deep Tract (108mm)
-    { lower_lat: 16, lower_med: 12, middle: 14, upper: 12 }  // Case 6: Malrotated Horseshoe Kidney
-  ];
-
-  CASES.forEach((c, idx) => {
-    // Position Upper-Pole Posterior Calyx in the true posterolateral 11th-12th ICS
-    if (c.calyces.upper && idx !== 5) {
-      c.calyces.upper.x = c.pelvis.x + 25;
-      c.calyces.upper.y = c.rib12Y + 6;
-      c.calyces.upper.supracostal = true;
-    }
-
-    const pel = c.pelvis;
-    const axMap = axialProfileByCase[idx] || axialProfileByCase[0];
-    Object.keys(c.calyces).forEach(k => {
-      const cal = c.calyces[k];
-      if (axMap[k] !== undefined) cal.axialDeg = axMap[k];
-
-      // Synchronize coronalDeg strictly with the 0° AP Fluoroscopy Calyx-to-Pelvis vector
-      const dx = cal.x - pel.x;
-      const dy = pel.y - cal.y;
-      cal.coronalDeg = Math.round(Math.atan2(dy, dx) * 180 / Math.PI * 2) / 2;
-    });
-  });
-})();
 
 // ============================================================================
 // INTERACTIVE SLOW STEP-BY-STEP AUTO-SOLUTION & ERROR RECOVERY ENGINE
@@ -385,6 +331,7 @@ function buildAutoSolutionSteps() {
         duration: 3.0,
         target: {
           stage: 1,
+          respMode: opt.respMode,
           cArmAx: 0,
           cArmOb: 0,
           latCm: opt.latCm,
@@ -403,6 +350,7 @@ function buildAutoSolutionSteps() {
         duration: 3.2,
         target: {
           stage: 1,
+          respMode: opt.respMode,
           cArmAx: 0,
           cArmOb: 30,
           pitchDeg: opt.pitchDeg,
@@ -439,7 +387,7 @@ function buildAutoSolutionSteps() {
         stage: 1, cArmAx: 0, cArmOb: 30,
         pitchDeg: shallowPitch, depthMm: apparentDepth
       },
-      narration: `<b>Parallax Exposed at +30° Cephalad:</b> As the C-arm camera tilts <b>+30° Cephalad</b> (over the head looking down), the target calyx stays centered at the isocenter while superficial structures (the ribs and our superficial needle tip at Z=${zActual}mm) sweep <b>UPWARD (cephalad)</b> off the calyx!`
+      narration: `<b>Parallax Exposed at +30° Cephalad:</b> As the C-arm camera tilts <b>+30° Cephalad</b>, the target calyx stays centered at the isocenter while superficial structures (the ribs and our superficial needle tip at Z=${zActual}mm) sweep <b>UPWARD (cephalad)</b> off the calyx!`
     });
     steps.push({
       title: `ERROR DEMO 1: RETRACT TO FAT (18 MM) & ANGLE STEEPER DOWNWARD`,
@@ -529,7 +477,7 @@ function buildAutoSolutionSteps() {
         latCm: opt.latCm, ccCm: opt.ccCm, corDeg: offCor,
         pitchDeg: offPitch, depthMm: 22
       },
-      narration: `<b>Why the Bull's Eye Turned Into a Line:</b> At the calyx's true coaxial angle (<b>${opt.trueAxDeg}° Axial, ${opt.trueObDeg}° Tilt</b>), the calyceal cup foreshortens into a round target ring and your needle should look like a single dot. Because the hub drifted, you see an elongated needle shaft!`
+      narration: `<b>Why the Bull's Eye Turned Into a Line:</b> At the calyx's true coaxial angle (<b>${opt.trueAxDeg}° Axial, ${opt.trueObDeg}° Tilt</b>), your needle should look like a single dot. Because the hub drifted, you see an elongated needle shaft!`
     });
     steps.push({
       title: `ERROR DEMO 4: PIVOT HUB OVER TIP TO COLLAPSE LINE INTO DOT`,
@@ -540,7 +488,7 @@ function buildAutoSolutionSteps() {
         latCm: opt.latCm, ccCm: opt.ccCm, corDeg: opt.corDeg,
         pitchDeg: opt.pitchDeg, depthMm: opt.fasciaDepthMm + 4
       },
-      narration: `<b>The OR Fix:</b> Keep the needle tip anchored at Point B and <b>move the needle hub toward the tip</b> until the hub ring slides directly over the tip inside the circular calyceal ring (<b>◎ BULL'S EYE COAXIAL LOCK</b>), then punch through the fascia (<b>${opt.fasciaDepthMm + 4} mm</b>).`
+      narration: `<b>The OR Fix:</b> Keep the needle tip anchored at Point B and <b>move the needle hub toward the tip</b> until the hub ring slides directly over the tip (<b>◎ BULL'S EYE COAXIAL LOCK</b>), then punch through the fascia (<b>${opt.fasciaDepthMm + 4} mm</b>).`
     });
   }
 
@@ -598,7 +546,7 @@ function buildAutoSolutionSteps() {
       },
       narration: tech === 'triangulation'
         ? `<b>Plane 1 Advancement (0° AP):</b> Gliding through subcutaneous fat (3–24 mm) along the 0° infundibular line, then punching through the <b>Lumbodorsal Fascia at ${opt.fasciaDepthMm} mm [1st Tactile Pop: 6.8 N]</b>.`
-        : `<b>Patient-Specific Coaxial Lock (${opt.trueAxDeg}° Axial):</b> Rotating C-arm to this calyx's true end-on angle (${cal.axialDeg}°) where the calyceal crescent foreshortens into a round target ring, and advancing through the <b>Lumbodorsal Fascia [1st Pop]</b>.`
+        : `<b>Patient-Specific Coaxial Lock (${opt.trueAxDeg}° Axial):</b> Rotating C-arm to this calyx's true end-on angle (${cal.axialDeg}°) and advancing through the <b>Lumbodorsal Fascia [1st Pop]</b>.`
     });
 
     steps.push({
@@ -651,8 +599,8 @@ function buildAutoSolutionSteps() {
       terumoTorqueDeg: idealTorque,
       wireAdvMm: 88
     },
-    onArrive: () => { setWireType('terumo'); evaluateWireProgress(); },
-    narration: `<b>Hydrophilic Guidewire Negotiation:</b> Selecting the <b>0.035" Angled Terumo</b> wire and rotating the torque vise to the sweet spot (<b>${idealTorque}°</b>) so the bevel deflects past the impacted stone rim and glides down the ureter.`
+    onArrive: () => { evaluateWireProgress(); },
+    narration: `<b>Hydrophilic Guidewire Negotiation:</b> Rotating the angled 0.035" Terumo torque vise to the sweet spot (<b>${idealTorque}°</b>) so the bevel deflects past the impacted stone rim and glides down the ureter.`
   });
 
   steps.push({
@@ -839,7 +787,7 @@ function tickAutoSolve(dt) {
 }
 
 // ============================================================================
-// UI SYNC & CONTROLS
+// UI SYNC & CONTROLS (SPOILERS HIDDEN UNLESS AUTO-SOLVING OR SNAPPED)
 // ============================================================================
 function syncAllUI() {
   const cal = getTargetCalyxBase();
@@ -847,8 +795,11 @@ function syncAllUI() {
   document.getElementById('vAx').textContent = (state.cArmAx >= 0 ? '+' : '') + Math.round(state.cArmAx) + '°';
   document.getElementById('sOb').value = state.cArmOb;
   document.getElementById('vOb').textContent = (state.cArmOb >= 0 ? '+' : '') + Math.round(state.cArmOb) + '°';
-  document.getElementById('cArmReadout').textContent =
-    `Axial: ${state.cArmAx >= 0 ? '+' : ''}${Math.round(state.cArmAx)}° (Calyx Axis: +${cal.axialDeg}°) | Tilt: ${state.cArmOb >= 0 ? '+' : ''}${Math.round(state.cArmOb)}°`;
+
+  const showHints = state.assistedSnapped || state.autoPlaying;
+  document.getElementById('cArmReadout').textContent = showHints
+    ? `Axial: ${state.cArmAx >= 0 ? '+' : ''}${Math.round(state.cArmAx)}° (Calyx Axis: +${cal.axialDeg}°) | Tilt: ${state.cArmOb >= 0 ? '+' : ''}${Math.round(state.cArmOb)}°`
+    : `Axial: ${state.cArmAx >= 0 ? '+' : ''}${Math.round(state.cArmAx)}° | Tilt: ${state.cArmOb >= 0 ? '+' : ''}${Math.round(state.cArmOb)}°`;
 
   document.getElementById('sLat').value = state.latCm.toFixed(1);
   document.getElementById('vLat').textContent = state.latCm.toFixed(1) + ' cm';
@@ -866,7 +817,9 @@ function syncAllUI() {
   const surfMm = Math.hypot(state.latCm * 10, state.ccCm * 10);
   const idealP = Math.atan2(surfMm, cal.z) * 180 / Math.PI;
   const tractMm = Math.round(Math.hypot(surfMm, cal.z));
-  document.getElementById('trigHint').textContent = `Tract:${tractMm}mm | Ideal Pitch:${idealP.toFixed(1)}° | Calyx Ax:${cal.axialDeg}°`;
+  document.getElementById('trigHint').textContent = showHints
+    ? `Tract:${tractMm}mm | Ideal Pitch:${idealP.toFixed(1)}°`
+    : `Manual OR Mode (Use C-Arm Parallax)`;
 
   document.getElementById('sTorque').value = state.terumoTorqueDeg;
   document.getElementById('vTorque').textContent = state.terumoTorqueDeg + '°';
@@ -937,7 +890,6 @@ function markCArmVisited() {
 
 function setCArm(ax, ob) {
   stopAutoSolve(false);
-  // Honest 30° button sets 30°, while True Coaxial button passes exact (ax, ob)
   state.cArmAx = ax;
   state.cArmOb = ob;
   state.lihDirty = true;
@@ -1046,8 +998,11 @@ function markPointA() {
   state.pointAMarked = true;
 }
 
+// Clicking "2. Snap Optimal Point B" on the Flank Map acts as your explicit "Give Me Optimal Setup" button!
 function autoTrigPointB() {
   stopAutoSolve(false);
+  state.assistedSnapped = true;
+  state.pointAMarked = true;
   const opt = computeOptimalGeometryForTechnique(state.coachMode);
   state.respMode = opt.respMode;
   const labels = { insp: 'Resp: Insp Hold', exp: 'Resp: Exp Hold', tidal: 'Resp: Tidal' };
@@ -1064,7 +1019,7 @@ function autoTrigPointB() {
 }
 
 // ============================================================================
-// MOUSE, TOUCH (WITH ON-SCREEN DEPTH SCRUBBER) & KEYBOARD INTERACTION
+// MOUSE, TOUCH (MANUAL POINT B DRAG + DEPTH SCRUBBER) & KEYBOARD INTERACTION
 // ============================================================================
 let draggingFluoroHub = false;
 let draggingDepthScrubber = false;
@@ -1077,7 +1032,6 @@ fluoroCanvas.addEventListener('pointerdown', e => {
   const px = e.clientX - rect.left;
   const py = e.clientY - rect.top;
 
-  // Rightmost 44px strip on Fluoro Canvas acts as a Touch Depth Thumb-Scrubber!
   if (px > rect.width - 44) {
     draggingDepthScrubber = true;
     const frac = Math.max(0, Math.min(1, (py - 40) / (rect.height - 80)));
@@ -1155,15 +1109,13 @@ window.addEventListener('pointermove', e => {
 });
 window.addEventListener('pointerup', () => { draggingSkinPointB = false; });
 
+// MANUAL POINT B DRAG: Moves skin entry coordinates (L and CC) WITHOUT turret auto-aiming!
 function movePointBOnSkin(wx, wy) {
   const cal = getTargetCalyxBase();
   const refX = cal.x;
   const refY = cal.y + getPlannedRespShift();
-  state.latCm = Math.max(0.5, Math.min(8.0, (wx - refX) / 10));
-  state.ccCm = Math.max(-6.0, Math.min(5.0, (wy - refY) / 10));
-  const dx = refX - (refX + state.latCm * 10);
-  const dy = refY - (refY + state.ccCm * 10);
-  state.corDeg = Math.round(Math.max(-75, Math.min(75, Math.atan2(dy, -dx) * 180 / Math.PI)) * 2) / 2;
+  state.latCm = Math.round(Math.max(0.5, Math.min(8.0, (wx - refX) / 10)) * 10) / 10;
+  state.ccCm = Math.round(Math.max(-6.0, Math.min(5.0, (wy - refY) / 10)) * 10) / 10;
   state.lihDirty = true;
   syncAllUI();
   updateDiagnosticsAndCoach();
@@ -1206,7 +1158,6 @@ function getEffectiveNeedleAngles() {
     sagCor = -7.0 * factor;
   }
 
-  // Respiratory "Pendulum / Windshield-Wiper" effect when needle is in renal parenchyma during Tidal breathing
   let respPendulumCor = 0;
   let isPendulumSwinging = false;
   if (state.respMode === 'tidal' && state.depthMm > 48) {
@@ -1228,8 +1179,6 @@ function getNeedle3D() {
   const dyLive = getRespShift();
   const dyPlanned = getPlannedRespShift();
 
-  // Point A moves with the live retroperitoneal kidney;
-  // Point B (skinEntry) is fixed to the patient's chest wall skin!
   const pointA = { x: cal.x, y: cal.y + dyLive, z: 0 };
   const skinEntry = {
     x: cal.x + state.latCm * 10,
@@ -1397,7 +1346,6 @@ function getOptimalTerumoTorque() {
 }
 
 function autoSteerTerumo() {
-  setWireType('terumo');
   state.terumoTorqueDeg = getOptimalTerumoTorque();
   state.wireAdvMm = 88;
   syncAllUI();
@@ -1415,7 +1363,9 @@ function evaluateWireProgress() {
   const badge = document.getElementById('statusBadge');
   const txt = document.getElementById('statusText');
   const idealTorque = getOptimalTerumoTorque();
-  document.getElementById('sweetSpotHint').textContent = `Sweet Spot: ~${idealTorque}°`;
+  document.getElementById('sweetSpotHint').textContent = state.assistedSnapped
+    ? `Sweet Spot: ~${idealTorque}°`
+    : `Torque Vise (0°–360°)`;
 
   if (!diag.inTarget) {
     state.wireInPelvis = false;
@@ -1426,31 +1376,19 @@ function evaluateWireProgress() {
   }
 
   const isImpactedStaghorn = CASES[state.caseIdx].stoneType === 'staghorn' || state.caseIdx === 4;
-  // Standard J-Tip wire bounces off impacted staghorn stones!
-  if (state.wireType === 'jtip' && isImpactedStaghorn && state.wireAdvMm >= 35) {
-    state.wireInPelvis = false;
-    badge.className = 'badge-pill b-err';
-    badge.textContent = 'STANDARD J-TIP WIRE BLOCKED BY IMPACTED STONE RIM!';
-    txt.innerHTML = 'A 3mm radius PTFE J-Tip cannot slip past an impacted staghorn stone! Switch to the <b>0.035" Angled Terumo (Hydrophilic)</b> wire above and torque the bevel.';
-    updateDiagnosticsAndCoach();
-    return;
-  }
-
   const torqueDiff = Math.min(
     Math.abs(state.terumoTorqueDeg - idealTorque),
     360 - Math.abs(state.terumoTorqueDeg - idealTorque)
   );
 
-  const needsPreciseTorque = (state.wireType === 'terumo') && (diag.dogLegDeg > 16 || isImpactedStaghorn);
+  const needsPreciseTorque = diag.dogLegDeg > 16 || isImpactedStaghorn;
   const torqueAligned = !needsPreciseTorque || torqueDiff <= 38;
 
   if (state.wireAdvMm >= 55 && torqueAligned && diag.dogLegDeg <= 35) {
     state.wireInPelvis = true;
     badge.className = 'badge-pill b-ok';
-    badge.textContent = state.wireType === 'jtip'
-      ? '0.035" J-TIP WIRE COILED IN SPACIOUS PELVIS!'
-      : 'TERUMO WIRE NEGOTIATED INTO PELVIS & URETER!';
-    txt.innerHTML = `Guidewire deflected past the stone edge and across the infundibular neck into the ureter. Now advance the <b>5Fr Kumpe Catheter</b> and swap for an <b>Amplatz Super Stiff Wire</b>.`;
+    badge.textContent = 'TERUMO WIRE NEGOTIATED INTO PELVIS & URETER!';
+    txt.innerHTML = `Angled hydrophilic tip deflected past the stone edge and across the infundibular neck into the ureter. Now advance the <b>5Fr Kumpe Catheter</b> and swap for an <b>Amplatz Super Stiff Wire</b>.`;
   } else if (state.wireAdvMm >= 35) {
     state.wireInPelvis = false;
     badge.className = 'badge-pill b-warn';
@@ -1459,7 +1397,7 @@ function evaluateWireProgress() {
       txt.innerHTML = `Your needle entered at a <b>${diag.dogLegDeg.toFixed(1)}° angle</b> to the infundibulum (Pure Bull's Eye Roof-Entry Trap!). Return to Stage 1 (0° AP) and align Coronal Aim with the infundibulum.`;
     } else {
       badge.textContent = 'WIRE BOUNCING OFF STONE / NECK WALL';
-      txt.innerHTML = `Rotate the <b>Terumo Tip Torque Vise</b> toward <b>~${idealTorque}°</b> (or click Auto-Torque Tip) so the bevel slips past the stone!`;
+      txt.innerHTML = `Rotate the <b>Terumo Tip Torque Vise</b> (or click Auto-Torque Tip) so the bevel slips past the stone rim!`;
     }
   }
   updateDiagnosticsAndCoach();
@@ -1513,18 +1451,18 @@ function evaluateDilationPhysics() {
   } else if (state.sheathDepthMm > 30 && state.sheathDepthMm < state.depthMm - 8) {
     badge.className = 'badge-pill b-warn';
     badge.textContent = 'UNDER-DILATION TRAP: SHEATH STOPPED IN PERINEPHRIC FAT!';
-    txt.innerHTML = `24 Fr Amplatz sheath (${state.sheathDepthMm} mm) is parked short of the calyceal cup (${Math.round(state.depthMm)} mm)! Nephroscopy shows yellow perinephric fat ("white-out") and fluid extravasation.`;
+    txt.innerHTML = `24 Fr Amplatz sheath (${state.sheathDepthMm} mm) is parked short of the calyceal cup (${Math.round(state.depthMm)} mm)! Nephroscopy shows yellow perinephric fat ("white-out").`;
   } else if (Math.abs(state.sheathDepthMm - state.depthMm) <= 7 && state.rodDepthMm >= state.depthMm - 4) {
     badge.className = 'badge-pill b-ok';
     badge.textContent = '24 Fr AMPLATZ SHEATH PARKED IN CALYCEAL CUP!';
-    txt.innerHTML = `Optimal coaxial tract dilation complete! Use the <b>Rigid Nephroscope Sweep</b> slider to inspect stone clearance reach and live endoscopic view.`;
+    txt.innerHTML = `Optimal coaxial tract dilation complete! Use the <b>Rigid Nephroscope Sweep</b> slider to inspect stone clearance reach and parenchymal torque.`;
   }
 
   const diag = computeDiagnostics();
   const effectiveTorqueStress = Math.round(diag.dogLegDeg * 0.9 + Math.abs(state.scopeSweepDeg) * 1.1);
   const torqueColor = effectiveTorqueStress < 28 ? '#4ade80' : (effectiveTorqueStress < 45 ? '#fbbf24' : '#f87171');
   document.getElementById('torqueScoreBox').innerHTML = `
-    <div><b>Selected Calyx:</b> ${cal.label} (True Axial: ${cal.axialDeg}°)</div>
+    <div><b>Selected Calyx:</b> ${cal.label}</div>
     <div><b>Rigid Scope Stone Reach:</b> <span style="color:#38bdf8;font-weight:700;">${cal.reachPct}% of Pelvicalyceal System</span></div>
     <div><b>Infundibular Torque Stress:</b> <span style="color:${torqueColor};font-weight:700;">${effectiveTorqueStress} N·cm (${effectiveTorqueStress < 28 ? 'Safe Fulcrum' : (effectiveTorqueStress < 45 ? 'Moderate Torque' : 'DANGER: Infundibular Tear Risk!')})</span></div>
   `;
@@ -1643,7 +1581,7 @@ function updateDiagnosticsAndCoach() {
     steps = [
       { done: state.visited0AP && d.coronalMismatch <= 8, text: "1. 0° AP: Align Point B & Coronal Aim along infundibulum." },
       { done: state.depthMm >= 28, text: "2. Skin (3mm) → Lumbodorsal Fascia [1st Pop] (~32mm)." },
-      { done: state.visited30Ax && d.coaxialErr < 10 && state.depthMm >= 32, text: `3. Coaxial View (${cal.axialDeg}°): Hub-over-tip inside circular cup.` },
+      { done: state.visited30Ax && d.coaxialErr < 10 && state.depthMm >= 32, text: "3. Oblique Coaxial View: Hub-over-tip inside circular cup." },
       { done: d.inTarget && state.styletPulled, text: "4. 0° AP Dimple & Pop [2nd Pop]: Enter papilla & check efflux." },
       { done: state.wireInPelvis && state.stiffWireExchanged, text: "5. Stage 2: Steer Terumo wire & swap to Super Stiff." },
       { done: sheathDone, text: "6. Stage 3: Coaxial dilation & park 24Fr Amplatz sheath." }
@@ -1657,7 +1595,7 @@ function updateDiagnosticsAndCoach() {
     ];
   } else {
     steps = [
-      { done: state.visited30Ax && d.coaxialErr < 8 && state.depthMm >= 32, text: `1. ${cal.axialDeg}° Ipsilateral: Superimpose hub & tip (Bull's Eye dot) & punch fascia.` },
+      { done: state.visited30Ax && d.coaxialErr < 8 && state.depthMm >= 32, text: "1. Ipsilateral Oblique: Superimpose hub & tip (Bull's Eye dot) & punch fascia." },
       { done: d.inTarget && state.styletPulled, text: "2. 0° AP Check: Watch calyceal dimple, pop in, & pull stylet." },
       { done: state.wireInPelvis && state.stiffWireExchanged, text: "3. Stage 2: Torque Terumo wire across neck & swap to Super Stiff." },
       { done: sheathDone, text: "4. Stage 3: Dilate tract & park 24Fr Amplatz sheath." }
@@ -1699,18 +1637,13 @@ function updateDiagnosticsAndCoach() {
     } else {
       badge.className = d.inTarget ? 'badge-pill b-ok' : 'badge-pill b-info';
       badge.textContent = `DOG-LEG: ${d.dogLegDeg.toFixed(1)}° | DEPTH: ${Math.round(state.depthMm)} MM | FORCE: ${d.resistanceN.toFixed(1)} N`;
-      txt.innerHTML = `<b>${d.layer}</b> — Target: <b>${cal.label}</b> (True Axial: <b>${cal.axialDeg}°</b> | Dist to papilla: <b>${d.distToCalyx.toFixed(1)} mm</b>).`;
+      txt.innerHTML = `<b>${d.layer}</b> — Target: <b>${cal.label}</b> (Dist to papilla: <b>${d.distToCalyx.toFixed(1)} mm</b>).`;
     }
   }
 }
 
 // ============================================================================
-// v5.0 RENDERER ENHANCEMENTS (HOOKS DIRECTLY INTO RENDERER.JS CANVAS CONTEXTS)
-// Adds:
-//   1. End-On Target Ring Foreshortening when C-Arm approaches cal.axialDeg
-//   2. On-Screen Touch Depth Thumb-Scrubber on right edge of Fluoro Monitor
-//   3. Oblique AEC Radiation Dose Rate Multiplier
-//   4. Live 24Fr Rigid Nephroscope Endoscopic View Inset in Stage 3 (Tab 5)
+// FLUORO DEPTH SCRUBBER, END-ON PROFILE HUD & 24Fr NEPHROSCOPE OVERLAY
 // ============================================================================
 (function hookRendererUpgrades() {
   let lastFrameTime = performance.now();
@@ -1720,7 +1653,6 @@ function updateDiagnosticsAndCoach() {
     const dt = Math.min(0.1, (now - lastFrameTime) / 1000);
     lastFrameTime = now;
 
-    // 1. Oblique & Obese AEC Dose Rate Multiplier (ALARA Physics)
     const isFiring = state.contFluoro || state.pedalDown || state.autoPlaying;
     if (isFiring) {
       const obFactor = (Math.abs(state.cArmAx) + Math.abs(state.cArmOb)) / 45;
@@ -1733,7 +1665,6 @@ function updateDiagnosticsAndCoach() {
       }
     }
 
-    // 2. Draw End-On Papillary Ring Indicator & Touch Depth Scrubber on Fluoro Canvas
     const fw = fluoroCanvas.width;
     const fh = fluoroCanvas.height;
     if (fw > 0 && fh > 0) {
@@ -1741,8 +1672,7 @@ function updateDiagnosticsAndCoach() {
       const axDiff = Math.abs(state.cArmAx - cal.axialDeg);
 
       fCtx.save();
-      // End-On Calyceal Cup Foreshortening HUD badge when C-arm aligns with cal.axialDeg
-      if (axDiff <= 6 && (!state.blindMode || isFiring)) {
+      if (axDiff <= 5 && (!state.blindMode || isFiring)) {
         fCtx.fillStyle = 'rgba(16, 185, 129, 0.18)';
         fCtx.strokeStyle = '#10b981';
         fCtx.lineWidth = 1.5;
@@ -1753,7 +1683,6 @@ function updateDiagnosticsAndCoach() {
         fCtx.fillText(`◎ CALYX END-ON PROFILE (${cal.axialDeg}° AXIAL)`, 22, fh - 25);
       }
 
-      // On-Screen Touch Depth Thumb-Scrubber (Right Edge of Fluoro Canvas)
       const sx = fw - 26;
       const syTop = 44;
       const syBot = fh - 44;
@@ -1765,17 +1694,6 @@ function updateDiagnosticsAndCoach() {
       fCtx.fillRect(sx - 10, syTop, 20, sHeight);
       fCtx.strokeRect(sx - 10, syTop, 20, sHeight);
 
-      // Fascia & Calyx tick marks on scrubber
-      const opt = computeOptimalGeometryForTechnique(state.coachMode);
-      const yFascia = syTop + (opt.fasciaDepthMm / 125) * sHeight;
-      const yCalyx  = syTop + (opt.tractDistMm / 125) * sHeight;
-
-      fCtx.strokeStyle = '#f59e0b';
-      fCtx.beginPath(); fCtx.moveTo(sx - 9, yFascia); fCtx.lineTo(sx + 9, yFascia); fCtx.stroke();
-      fCtx.strokeStyle = '#38bdf8';
-      fCtx.beginPath(); fCtx.moveTo(sx - 9, yCalyx); fCtx.lineTo(sx + 9, yCalyx); fCtx.stroke();
-
-      // Current Depth Thumb Knob
       const yCur = syTop + Math.min(1, state.depthMm / 125) * sHeight;
       fCtx.fillStyle = '#38bdf8';
       fCtx.beginPath();
@@ -1788,7 +1706,6 @@ function updateDiagnosticsAndCoach() {
       fCtx.restore();
     }
 
-    // 3. Live 24Fr Rigid Nephroscope Endoscopic View Inset in Tab 5 (Dilation & Torque)
     if (state.workbench === 'dilation' && benchCanvas.width > 0) {
       const bw = benchCanvas.width;
       const bh = benchCanvas.height;
@@ -1820,21 +1737,13 @@ function updateDiagnosticsAndCoach() {
         bCtx.fillText('Advance 24Fr Sheath', ex, ey - 4);
         bCtx.fillText('for Nephroscopy View', ex, ey + 10);
       } else if (isUnderDilated) {
-        // Perinephric Fat "White-Out / Yellow Globules"
         bCtx.fillStyle = '#ca8a04';
         bCtx.fillRect(ex - r, ey - r, r * 2, r * 2);
-        for (let i = -2; i <= 2; i++) {
-          bCtx.beginPath();
-          bCtx.arc(ex + i * 14, ey + (i % 2) * 10, 16, 0, Math.PI * 2);
-          bCtx.fillStyle = 'rgba(254, 240, 138, 0.78)';
-          bCtx.fill();
-        }
         bCtx.fillStyle = '#713f12';
         bCtx.font = 'bold 10px sans-serif';
         bCtx.textAlign = 'center';
         bCtx.fillText('PERINEPHRIC FAT!', ex, ey + 4);
       } else if (isOverDilated || stress >= 48) {
-        // Red Venous Hemorrhage Obscuration
         bCtx.fillStyle = '#991b1b';
         bCtx.fillRect(ex - r, ey - r, r * 2, r * 2);
         bCtx.fillStyle = '#fecaca';
@@ -1842,7 +1751,6 @@ function updateDiagnosticsAndCoach() {
         bCtx.textAlign = 'center';
         bCtx.fillText('RED-OUT HEMORRHAGE', ex, ey + 4);
       } else {
-        // Healthy Pink Calyceal Urothelium + Golden Calcium Oxalate Stone in View!
         const g = bCtx.createRadialGradient(ex, ey, r * 0.1, ex, ey, r);
         g.addColorStop(0, '#f43f5e');
         g.addColorStop(1, '#881337');
@@ -1870,154 +1778,4 @@ function updateDiagnosticsAndCoach() {
   }
 
   requestAnimationFrame(postRenderOverlay);
-})();
-// ============================================================================
-// v5.1 UNASSISTED OR MODE (TRUE MANUAL POINT B, MANUAL AIM & HIDDEN SPOILERS)
-// Paste at the very bottom of physics.js
-// ============================================================================
-state.assistedMode = false; // Default to True Unassisted OR Mode!
-
-(function initUnassistedORMode() {
-  // 1. Inject "Unassisted OR vs Assisted" Toggle Button in Top Bar
-  const blindBtn = document.getElementById('blindBtn');
-  if (blindBtn && !document.getElementById('assistModeBtn')) {
-    const btn = document.createElement('button');
-    btn.id = 'assistModeBtn';
-    btn.style.borderColor = '#a855f7';
-    btn.style.color = '#e9d5ff';
-    btn.style.fontWeight = '600';
-    btn.onclick = toggleAssistedMode;
-    blindBtn.parentNode.insertBefore(btn, blindBtn);
-  }
-
-  function updateAssistButtonUI() {
-    const btn = document.getElementById('assistModeBtn');
-    const coaxBtn = document.getElementById('trueCoaxBtn');
-    if (btn) {
-      btn.textContent = state.assistedMode ? 'Mode: Assisted (Auto-Setup)' : 'Mode: Unassisted OR (Manual)';
-      btn.classList.toggle('active', !state.assistedMode);
-    }
-    if (coaxBtn) {
-      coaxBtn.style.display = state.assistedMode ? 'inline-block' : 'none';
-    }
-  }
-
-  window.toggleAssistedMode = function() {
-    state.assistedMode = !state.assistedMode;
-    updateAssistButtonUI();
-    initCase(state.caseIdx, true);
-  };
-
-  // 2. Override initCase so Unassisted Mode starts at neutral, unaligned coordinates
-  window.initCase = function(idx, keepCalyx = false) {
-    stopAutoSolve(true);
-    state.caseIdx = idx;
-    const c = CASES[idx];
-    if (!keepCalyx) {
-      state.targetKey = c.defaultCalyx;
-      document.getElementById('calyxSelect').value = state.targetKey;
-    }
-    const opt = computeOptimalGeometryForTechnique(state.coachMode);
-
-    if (state.assistedMode) {
-      // Assisted Mode: Pre-aligns Point B, Coronal Aim, Pitch & Respiration
-      state.respMode = opt.respMode;
-      state.latCm = opt.latCm;
-      state.ccCm = opt.ccCm;
-      state.corDeg = opt.corDeg;
-      state.pitchDeg = opt.pitchDeg;
-      state.dilPitchDeg = opt.pitchDeg;
-      state.pointAMarked = true;
-    } else {
-      // Unassisted OR Mode: Starts in Tidal breathing with a neutral, unaligned needle!
-      // Surgeon must manually lock respiration, place Point B, and aim Coronal & Pitch!
-      state.respMode = 'tidal';
-      state.latCm = 3.5;
-      state.ccCm = -1.0;
-      state.corDeg = 0.0;
-      state.pitchDeg = 22.0;
-      state.dilPitchDeg = 22.0;
-      state.pointAMarked = false;
-    }
-
-    const respLabels = { insp: 'Resp: Insp Hold', exp: 'Resp: Exp Hold', tidal: 'Resp: Tidal' };
-    document.getElementById('btnResp').textContent = respLabels[state.respMode];
-
-    state.cArmAx = 0;
-    state.cArmOb = 0;
-    state.depthMm = 0;
-
-    state.visited0AP = true;
-    state.visited30Ax = false;
-    state.visited30Ob = false;
-
-    state.blushClouds = [];
-    document.getElementById('clearBlushBtn').style.display = 'none';
-
-    state.styletPulled = false;
-    state.terumoTorqueDeg = 180;
-    state.wireAdvMm = 0;
-    state.wireInPelvis = false;
-    state.kumpeAdvanced = false;
-    state.stiffWireExchanged = false;
-
-    state.rodDepthMm = 0;
-    state.sheathDepthMm = 0;
-    state.wireKinked = false;
-    state.scopeSweepDeg = 0;
-    state.blindRevealed = false;
-    state.lihDirty = true;
-
-    document.getElementById('btnKumpe').classList.remove('active');
-    document.getElementById('btnStiff').classList.remove('active');
-    document.getElementById('narrationBanner').classList.remove('visible');
-
-    const coaxBtn = document.getElementById('trueCoaxBtn');
-    if (coaxBtn) {
-      coaxBtn.textContent = `◎ Calyx Axis (${opt.calyxAxDeg}°)`;
-    }
-
-    updateAssistButtonUI();
-    setStage(1);
-    syncAllUI();
-    updateDiagnosticsAndCoach();
-  };
-
-  // 3. Decouple Point B Drag from Auto-Aiming in Unassisted Mode!
-  window.movePointBOnSkin = function(wx, wy) {
-    const cal = getTargetCalyxBase();
-    const refX = cal.x;
-    const refY = cal.y + getPlannedRespShift();
-    state.latCm = Math.round(Math.max(0.5, Math.min(8.0, (wx - refX) / 10)) * 10) / 10;
-    state.ccCm = Math.round(Math.max(-6.0, Math.min(5.0, (wy - refY) / 10)) * 10) / 10;
-
-    // Only auto-rotate Coronal Aim if Assisted Mode is ON!
-    // In Unassisted OR Mode, moving Point B moves ONLY the skin entry site.
-    if (state.assistedMode) {
-      const dx = refX - (refX + state.latCm * 10);
-      const dy = refY - (refY + state.ccCm * 10);
-      state.corDeg = Math.round(Math.max(-75, Math.min(75, Math.atan2(dy, -dx) * 180 / Math.PI)) * 2) / 2;
-    }
-
-    state.lihDirty = true;
-    syncAllUI();
-    updateDiagnosticsAndCoach();
-  };
-
-  // 4. Hide Answer Spoilers (Ideal Pitch, Tract Length, Calyx Axis, & Torque Sweet Spot) in Unassisted Mode
-  const origSyncAllUI = window.syncAllUI;
-  window.syncAllUI = function() {
-    origSyncAllUI();
-    if (!state.assistedMode) {
-      document.getElementById('cArmReadout').textContent =
-        `Axial: ${state.cArmAx >= 0 ? '+' : ''}${Math.round(state.cArmAx)}° | Tilt: ${state.cArmOb >= 0 ? '+' : ''}${Math.round(state.cArmOb)}°`;
-      document.getElementById('trigHint').textContent = `Manual Mode (Use C-Arm Parallax)`;
-      const ssHint = document.getElementById('sweetSpotHint');
-      if (ssHint) ssHint.textContent = `Torque Vise (0°–360°)`;
-    }
-  };
-
-  // Initialize into Unassisted OR Mode immediately
-  updateAssistButtonUI();
-  initCase(state.caseIdx, true);
 })();
