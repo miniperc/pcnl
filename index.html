@@ -3,18 +3,29 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PCNL Surgical Access, Auto-Solution & Haptic Simulator v6.0</title>
+  <title>PCNL Puncture Mastery & Haptic Simulator v6.5</title>
   <link rel="stylesheet" href="styles.css">
+  <style>
+    .review-modal { position:fixed; inset:0; background:rgba(4,8,15,0.88); z-index:9999; display:none; align-items:center; justify-content:center; backdrop-filter:blur(5px); padding:12px; }
+    .review-card { background:#0b1322; border:1px solid #38bdf8; border-radius:8px; max-width:680px; width:100%; max-height:92vh; overflow-y:auto; padding:18px; box-shadow:0 16px 40px rgba(0,0,0,0.85); display:flex; flex-direction:column; gap:12px; }
+    .review-top { display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #1e293b; padding-bottom:10px; }
+    .grade-badge { font-size:28px; font-weight:900; font-family:monospace; padding:4px 14px; border-radius:6px; border:2px solid currentColor; }
+    .cmp-table { width:100%; border-collapse:collapse; font-size:11.5px; background:#070c16; border:1px solid #1e293b; border-radius:6px; overflow:hidden; }
+    .cmp-table th, .cmp-table td { padding:6px 8px; text-align:left; border-bottom:1px solid #162032; }
+    .cmp-table th { background:#0f172a; color:#38bdf8; font-size:10.5px; text-transform:uppercase; }
+    .rev-sec { background:#070c16; border:1px solid #1e293b; border-radius:6px; padding:10px 12px; }
+    .rev-sec h4 { color:#38bdf8; font-size:11.5px; text-transform:uppercase; margin-bottom:6px; letter-spacing:0.4px; }
+    .rev-list { padding-left:18px; display:flex; flex-direction:column; gap:5px; font-size:11.8px; line-height:1.42; color:#e2e8f0; }
+  </style>
 </head>
 <body>
 
 <header>
   <div class="brand">
-    <span>PCNL SURGICAL SIMULATOR</span>
-    <span class="v-badge" style="background:#0284c7;border-color:#38bdf8;color:#fff;">v6.0 PHONE-3D</span>
+    <span>PCNL PUNCTURE SIMULATOR</span>
+    <span class="v-badge" style="background:#0284c7;border-color:#38bdf8;color:#fff;">v6.5 PUNCTURE PRO</span>
   </div>
   <div class="top-bar">
-    <!-- HARDCODED PHONE PAIRING BUTTON (ALWAYS VISIBLE) -->
     <button id="pairPhoneBtn" onclick="openPairPhoneModal()" style="background:#0284c7;border-color:#38bdf8;color:#fff;font-weight:800;">
       📱 Pair Phone Needle
     </button>
@@ -24,7 +35,7 @@
       <option value="1">Case 2: Branched Staghorn (Steep 52° Lower Neck — Dog-Leg Trap)</option>
       <option value="2">Case 3: High Calyx Under 12th Rib (Subcostal Cephalad Triangulation)</option>
       <option value="3">Case 4: Supracostal Upper-Pole Staghorn (11th–12th ICS Pleural Trap)</option>
-      <option value="4">Case 5: Morbid Obesity (10.5cm Depth) + Ant/Post Calyx Overlap</option>
+      <option value="4">Case 5: Morbid Obesity (10.4cm Depth) + Ant/Post Calyx Overlap</option>
       <option value="5">Case 6: Horseshoe / Malrotated Kidney (Posteromedial Calyces)</option>
     </select>
 
@@ -41,16 +52,16 @@
       <option value="bullseye">Technique: Pure Bull's Eye (30° Ipsilateral Coaxial)</option>
     </select>
 
-    <button id="autoPlayBtn" class="auto-btn" onclick="toggleAutoSolve()">▶ Auto-Solve (Slow Step-by-Step)</button>
-    <button onclick="stepAutoSolve(-1)" title="Previous Auto-Solution Step">⏮</button>
-    <button onclick="stepAutoSolve(1)" title="Next Auto-Solution Step">⏭</button>
+    <button id="autoPlayBtn" class="auto-btn" onclick="toggleAutoSolve()">▶ Auto-Solve</button>
+    <button onclick="stepAutoSolve(-1)" title="Previous Step">⏮</button>
+    <button onclick="stepAutoSolve(1)" title="Next Step">⏭</button>
     <select id="autoSpeedSelect" title="Auto-Solution Speed" style="width:66px;">
       <option value="0.55">0.5x Slow</option>
       <option value="1.0" selected>1.0x Norm</option>
       <option value="2.0">2.0x Fast</option>
     </select>
 
-    <button id="soundBtn" class="active" onclick="toggleSound()" title="Tactile Pop Audio Clicks">Audio Pops: ON</button>
+    <button id="soundBtn" class="active" onclick="toggleSound()">Audio Pops: ON</button>
     <button id="contFluoroBtn" class="active" onclick="toggleContFluoro()">Live Fluoro: ON</button>
     <button id="pedalBtn" class="pedal" onmousedown="startPedal()" onmouseup="stopPedal()" onmouseleave="stopPedal()">
       PEDAL [SPACE]
@@ -72,31 +83,25 @@
 
         <div class="narration-banner" id="narrationBanner">
           <div class="narration-title">
-            <span id="narrationStepTitle">AUTO-SOLUTION STEP 1/8</span>
+            <span id="narrationStepTitle">AUTO-SOLUTION STEP 1/5</span>
             <span id="narrationTechLabel" style="color:#4ade80;">HYBRID TECHNIQUE</span>
           </div>
-          <div class="narration-body" id="narrationBody">
-            Initializing step-by-step surgical walkthrough...
-          </div>
+          <div class="narration-body" id="narrationBody"></div>
         </div>
 
         <div class="fluoro-toolbar">
           <button onclick="setCArm(0,0)">0° AP</button>
           <button onclick="setCArm(30,0)">30° Bull's Eye</button>
           <button onclick="setCArm(0,30)">30° Ceph</button>
-          <button id="clampBtn" class="active" onclick="toggleClamp()">
-            Radiolucent Clamp: ON
-          </button>
+          <button id="clampBtn" class="active" onclick="toggleClamp()">Radiolucent Clamp: ON</button>
           <button onclick="injectNeedleContrast()">Inject Contrast</button>
-          <button onclick="clearBlush()" id="clearBlushBtn" style="display:none;border-color:#f59e0b;color:#fbbf24;">
-            Washout Blush
-          </button>
+          <button onclick="clearBlush()" id="clearBlushBtn" style="display:none;border-color:#f59e0b;color:#fbbf24;">Washout Blush</button>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- COLUMN 2: FLANK SURFACE MAP + 5-MODE DIAGNOSTIC WORKBENCH -->
+  <!-- COLUMN 2: FLANK SURFACE MAP + PUNCTURE DIAGNOSTIC WORKBENCH -->
   <div class="col">
     <div class="card" style="flex: 0.88;">
       <div class="card-header">
@@ -113,12 +118,10 @@
 
     <div class="card" style="flex: 1.12;">
       <div class="card-header">
-        <div style="display:flex;gap:3px;flex-wrap:wrap;">
-          <button id="wbTab1" class="active" onclick="setWorkbench('anatomy')" style="padding:2px 6px;font-size:10px;">1. Anatomy & Dog-Leg</button>
-          <button id="wbTab5" onclick="setWorkbench('compare')" style="padding:2px 6px;font-size:10px;border-color:#38bdf8;color:#7dd3fc;">2. Technique Impact</button>
-          <button id="wbTab2" onclick="setWorkbench('ultrasound')" style="padding:2px 6px;font-size:10px;">3. Ultrasound</button>
-          <button id="wbTab3" onclick="setWorkbench('wire')" style="padding:2px 6px;font-size:10px;">4. Wire & Kumpe</button>
-          <button id="wbTab4" onclick="setWorkbench('dilation')" style="padding:2px 6px;font-size:10px;">5. Dilation & Torque</button>
+        <div style="display:flex;gap:4px;flex-wrap:wrap;">
+          <button id="wbTab1" class="active" onclick="setWorkbench('anatomy')" style="padding:2px 8px;font-size:10.5px;">1. Axial Anatomy &amp; Dog-Leg</button>
+          <button id="wbTab5" onclick="setWorkbench('compare')" style="padding:2px 8px;font-size:10.5px;border-color:#38bdf8;color:#7dd3fc;">2. Technique Comparator</button>
+          <button id="wbTab2" onclick="setWorkbench('ultrasound')" style="padding:2px 8px;font-size:10.5px;">3. B-Mode Ultrasound</button>
         </div>
         <span id="tissueBadge" style="color:#fbbf24;font-family:monospace;font-size:10.5px;">0mm: On Skin Surface</span>
       </div>
@@ -128,11 +131,11 @@
     </div>
   </div>
 
-  <!-- COLUMN 3: 3-STAGE SURGICAL CONTROL DECK -->
+  <!-- COLUMN 3: FOCUSED 18G PUNCTURE CONTROL DECK -->
   <div class="sidebar">
     <div class="coach-card">
       <div class="coach-head">
-        <span style="font-size:10.5px;font-weight:700;color:var(--accent);" id="coachHeader">OPERATIVE CHECKLIST</span>
+        <span style="font-size:10.5px;font-weight:700;color:var(--accent);" id="coachHeader">PUNCTURE CHECKLIST</span>
         <div style="display:flex;gap:4px;">
           <button onclick="toggleBlind()" id="blindBtn" style="padding:1px 5px;font-size:9.5px;">OR Blind: OFF</button>
           <button onclick="resetCase()" style="padding:1px 6px;font-size:10px;">Reset (0mm)</button>
@@ -151,16 +154,9 @@
       </div>
     </div>
 
-    <div class="stage-tabs">
-      <button id="stBtn1" class="active" onclick="setStage(1)">STAGE 1: PUNCTURE</button>
-      <button id="stBtn2" onclick="setStage(2)">STAGE 2: WIRE/KMP</button>
-      <button id="stBtn3" onclick="setStage(3)">STAGE 3: DILATE</button>
-    </div>
-
-    <!-- STAGE 1 PANEL -->
     <div class="ctrl-panel visible" id="stage1Panel">
       <div class="sec-label">
-        <span>C-Arm Gantry & Pyelogram</span>
+        <span>C-Arm Gantry &amp; Pyelogram</span>
         <span style="color:var(--text-muted);font-weight:400;">[Q=0° | E=30°]</span>
       </div>
       <div class="sl-row">
@@ -177,21 +173,21 @@
         <button id="btnResp" onclick="cycleResp()">Resp: Insp Hold</button>
       </div>
 
-      <div class="sec-label" style="margin-top:3px;">
-        <span>18G Needle Geometry (Starts at 0mm Skin)</span>
-        <span id="trigHint" style="color:#7dd3fc;font-family:monospace;">Tract: 78mm</span>
+      <div class="sec-label" style="margin-top:4px;">
+        <span>18G Chiba Needle Geometry</span>
+        <span id="trigHint" style="color:#7dd3fc;font-family:monospace;">Manual OR Mode</span>
       </div>
       <div class="sl-row">
         <div class="sl-head"><span>Lateral Skin Offset L (from Point A)</span><span class="sl-val" id="vLat">4.0 cm</span></div>
-        <input type="range" id="sLat" min="1.5" max="8.0" step="0.1" value="4.0">
+        <input type="range" id="sLat" min="0.5" max="8.0" step="0.1" value="4.0">
       </div>
       <div class="sl-row">
         <div class="sl-head"><span>Cephalocaudal Skin Offset (Caudal -)</span><span class="sl-val" id="vCC">-1.6 cm</span></div>
-        <input type="range" id="sCC" min="-6.0" max="3.5" step="0.1" value="-1.6">
+        <input type="range" id="sCC" min="-6.0" max="5.0" step="0.1" value="-1.6">
       </div>
       <div class="sl-row">
         <div class="sl-head"><span>Coronal Aim Angle (Plane 1 Direction)</span><span class="sl-val" id="vCor">22.0°</span></div>
-        <input type="range" id="sCor" min="-45" max="65" step="0.5" value="22">
+        <input type="range" id="sCor" min="-75" max="75" step="0.5" value="22">
       </div>
       <div class="sl-row">
         <div class="sl-head"><span>Needle Pitch Angle (from Vertical AP) [←/→]</span><span class="sl-val" id="vPitch">30.5°</span></div>
@@ -207,98 +203,76 @@
           <button onclick="stepDepth(5)">+5mm Push</button>
         </div>
       </div>
-      <div class="grid-2" style="margin-top:3px;">
-        <button style="background:#1d4ed8;border-color:#3b82f6;font-weight:700;" onclick="pullStylet()">
-          1. Pull Stylet (Efflux)
-        </button>
-        <button style="background:#15803d;border-color:#22c55e;font-weight:700;" onclick="goToWireStage()">
-          2. Steer Guidewire →
-        </button>
-      </div>
-    </div>
 
-    <!-- STAGE 2 PANEL -->
-    <div class="ctrl-panel" id="stage2Panel">
-      <div class="sec-label">
-        <span>Active 0.035" Angled Terumo Steering</span>
-        <span id="sweetSpotHint" style="color:#4ade80;font-family:monospace;">Target Torque: ~180°</span>
-      </div>
-      <div class="sl-row">
-        <div class="sl-head"><span>Terumo Tip Torque Vise Rotation (0°–360°)</span><span class="sl-val" id="vTorque">90°</span></div>
-        <input type="range" id="sTorque" min="0" max="360" step="5" value="90">
-      </div>
-      <div class="sl-row">
-        <div class="sl-head"><span>Advance Hydrophilic Guidewire</span><span class="sl-val" id="vWireAdv">0 mm</span></div>
-        <input type="range" id="sWireAdv" min="0" max="100" step="1" value="0">
-        <div class="grid-3" style="margin-top:2px;">
-          <button onclick="stepWire(-10)">Retract -10mm</button>
-          <button onclick="stepWire(10)">Advance +10mm</button>
-          <button onclick="autoSteerTerumo()">Auto-Torque Tip</button>
-        </div>
-      </div>
-      <div class="sec-label" style="margin-top:5px;"><span>Catheter Backup & Stiff Wire Exchange</span></div>
-      <div class="grid-2">
-        <button id="btnKumpe" onclick="toggleKumpe()">1. Advance 5Fr Kumpe</button>
-        <button id="btnStiff" onclick="exchangeStiffWire()">2. Swap Super Stiff Wire</button>
-      </div>
-      <button style="background:#15803d;border-color:#22c55e;font-weight:700;margin-top:4px;" onclick="setStage(3)">
-        Proceed to Stage 3: Tract Dilation →
+      <button style="background:#15803d;border-color:#22c55e;font-weight:800;padding:9px;font-size:12px;margin-top:6px;" onclick="pullStylet()">
+        💧 PULL STYLET (CHECK EFFLUX &amp; AUTO-REVIEW PUNCTURE)
       </button>
-    </div>
-
-    <!-- STAGE 3 PANEL -->
-    <div class="ctrl-panel" id="stage3Panel">
-      <div class="sec-label">
-        <span>Coaxial Tract Dilation (Alken + Amplatz)</span>
-        <span id="needlePitchRef" style="color:#7dd3fc;font-family:monospace;">Needle Pitch: 30.5°</span>
-      </div>
-      <div class="sl-row">
-        <div class="sl-head"><span>Dilator Entry Pitch Angle (Match Needle!)</span><span class="sl-val" id="vDilPitch">30.5°</span></div>
-        <input type="range" id="sDilPitch" min="10" max="60" step="0.5" value="30.5">
-      </div>
-      <div class="sl-row">
-        <div class="sl-head"><span>Alken Guide Rod & Telescopic Dilators</span><span class="sl-val" id="vRod">0 mm</span></div>
-        <input type="range" id="sRod" min="0" max="125" step="1" value="0">
-      </div>
-      <div class="sl-row">
-        <div class="sl-head"><span>24 Fr Amplatz Renal Sheath Depth</span><span class="sl-val" id="vSheath">0 mm</span></div>
-        <input type="range" id="sSheath" min="0" max="125" step="1" value="0">
-      </div>
-      <button onclick="matchDilatorAngle()" style="font-size:10.5px;">Align Dilator Coaxial with Guidewire Vector</button>
-      <div class="sec-label" style="margin-top:5px;"><span>24 Fr Rigid Nephroscope Sweep</span></div>
-      <div class="sl-row">
-        <div class="sl-head"><span>Nephroscope Leverage / Sweep Angle</span><span class="sl-val" id="vScopeSweep">0° (Neutral)</span></div>
-        <input type="range" id="sScopeSweep" min="-35" max="35" step="1" value="0">
-      </div>
-      <div id="torqueScoreBox" style="font-size:10.8px;color:#cbd5e1;background:#060a10;padding:5px;border-radius:4px;border:1px solid #1e2d42;">
-        Park the 24 Fr Amplatz sheath inside the calyceal cup to evaluate rigid nephroscope reach and parenchymal torque.
-      </div>
     </div>
 
     <div class="telemetry-card">
       <div class="badge-pill b-info" id="statusBadge">READY ON SKIN (0 MM)</div>
-      <div id="statusText">Needle tip is resting on the flank skin at Point B (0 mm). Click <b>📱 Pair Phone Needle</b> or <b>▶ Auto-Solve</b>.</div>
+      <div id="statusText">Align your trajectory and advance into the target papilla, then click <b>💧 Pull Stylet</b> for a complete case- and calyx-specific surgical review.</div>
     </div>
   </div>
 </div>
 
-<!-- HARDCODED PHONE PAIRING MODAL -->
+<!-- AUTOMATIC PATIENT- & CALYX-SPECIFIC PUNCTURE REVIEW MODAL -->
+<div id="punctureReviewModal" class="review-modal">
+  <div class="review-card">
+    <div class="review-top">
+      <div>
+        <div id="revCaseTitle" style="font-size:14px;font-weight:800;color:#f8fafc;">CASE &amp; CALYX PUNCTURE REVIEW</div>
+        <div id="revVerdictSub" style="font-size:11.5px;color:#94a3b8;margin-top:2px;"></div>
+      </div>
+      <div id="revGradeBadge" class="grade-badge" style="color:#4ade80;">A</div>
+    </div>
+
+    <table class="cmp-table">
+      <thead>
+        <tr>
+          <th>Parameter</th>
+          <th>Your Puncture</th>
+          <th>Ideal for This Calyx</th>
+          <th>Clinical Impact</th>
+        </tr>
+      </thead>
+      <tbody id="revCompareBody"></tbody>
+    </table>
+
+    <div class="rev-sec">
+      <h4>1. What Happened &amp; How to Make This Puncture Better</h4>
+      <ul class="rev-list" id="revHowToImprove"></ul>
+    </div>
+
+    <div class="rev-sec">
+      <h4>2. Patient- &amp; Calyx-Specific Anatomical Strategy</h4>
+      <ul class="rev-list" id="revPatientCalyxNotes"></ul>
+    </div>
+
+    <div style="display:flex;gap:8px;justify-content:flex-end;">
+      <button onclick="applyIdealFixFromReview()" style="background:#15803d;border-color:#22c55e;color:#fff;font-weight:700;padding:8px 14px;">
+        ✨ Snap to Ideal Trajectory &amp; Compare
+      </button>
+      <button onclick="document.getElementById('punctureReviewModal').style.display='none'" style="background:#0284c7;border-color:#38bdf8;color:#fff;font-weight:800;padding:8px 16px;">
+        Continue Practicing
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- PHONE PAIRING MODAL -->
 <div id="phonePairModal" style="position:fixed;inset:0;background:rgba(4,8,15,0.86);z-index:9999;display:none;align-items:center;justify-content:center;backdrop-filter:blur(4px);">
   <div style="background:#0e1726;border:1px solid #38bdf8;border-radius:8px;padding:18px;max-width:430px;width:92%;text-align:center;box-shadow:0 12px 32px rgba(0,0,0,0.8);">
     <h3 style="color:#38bdf8;font-size:15px;margin-bottom:6px;">📱 2-DEVICE OR MODE: PHONE AS 18G NEEDLE</h3>
     <p style="color:#cbd5e1;font-size:11.5px;line-height:1.4;margin-bottom:12px;">
-      Scan this QR code with your phone camera (or open the link below on your phone) to hold your phone like the Chiba needle!
+      Scan this QR code with your phone camera to use your phone as a 3D Chiba needle!
     </p>
     <div style="background:#fff;padding:10px;border-radius:6px;display:inline-block;margin-bottom:10px;">
       <img id="phoneQrImg" src="" alt="Scan QR Code" style="width:180px;height:180px;display:block;">
     </div>
-    <div id="phoneRoomCodeDisplay" style="font-family:monospace;font-size:18px;font-weight:800;color:#fde047;margin-bottom:6px;">
-      ROOM CODE: ----
-    </div>
+    <div id="phoneRoomCodeDisplay" style="font-family:monospace;font-size:18px;font-weight:800;color:#fde047;margin-bottom:6px;">ROOM CODE: ----</div>
     <div id="phoneUrlDisplay" style="font-size:11px;color:#38bdf8;word-break:break-all;margin-bottom:12px;user-select:all;"></div>
-    <div id="pcPairStatus" style="font-size:11.5px;color:#fbbf24;font-weight:700;margin-bottom:12px;">
-      Connecting surgical P2P bridge...
-    </div>
+    <div id="pcPairStatus" style="font-size:11.5px;color:#fbbf24;font-weight:700;margin-bottom:12px;">Connecting surgical P2P bridge...</div>
     <button onclick="document.getElementById('phonePairModal').style.display='none'" style="background:#0284c7;color:#fff;border:1px solid #38bdf8;padding:7px 16px;border-radius:4px;font-weight:700;cursor:pointer;">
       Close Window
     </button>
