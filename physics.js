@@ -2295,3 +2295,617 @@ function updateDiagnosticsAndCoach() {
 
   updateDiagnosticsAndCoach();
 })();
+function getNeedle3D() {
+  const cal = getTargetCalyxBase();
+  const dyLive = getRespShift();
+
+  // Keep pointA and skinEntry 100% synchronized with renderer.js drawSkinSurface!
+  const pointA = { x: cal.x, y: cal.y + dyLive, z: 0 };
+  const skinEntry = {
+    x: pointA.x + state.latCm * 10,
+    y: pointA.y + state.ccCm * 10,
+    z: 0
+  };
+
+  const { effPitch, effCor, isSagging, isPendulumSwinging } = getEffectiveNeedleAngles();
+  const pRad = effPitch * Math.PI / 180;
+  const cRad = effCor * Math.PI / 180;
+
+  const dir = {
+    x: -Math.sin(pRad) * Math.cos(cRad),
+    y: Math.sin(pRad) * Math.sin(cRad),
+    z: Math.cos(pRad)
+  };
+
+  const len = 135;
+  const tip = {
+    x: skinEntry.x + dir.x * state.depthMm,
+    y: skinEntry.y + dir.y * state.depthMm,
+    z: skinEntry.z + dir.z * state.depthMm
+  };
+  const hub = {
+    x: tip.x - dir.x * len,
+    y: tip.y - dir.y * len,
+    z: tip.z - dir.z * len
+  };
+
+  return { pointA, skinEntry, dir, tip, hub, isSagging, isPendulumSwinging, effPitch, effCor };
+}
+
+function getLiveAnatomy() {
+  const base = CASES[state.caseIdx];
+  const dy = getRespShift();
+  const ng = getNeedle3D();
+  const targetBase = base.calyces[state.targetKey];
+
+  let pushX = 0, pushY = 0;
+  if (state.depthMm > 48) {
+    const distPast = state.depthMm - (targetBase.z - 2);
+    const tentMm = distPast < 0
+      ? (state.depthMm - 48) * 0.08
+      : Math.max(0, 1.4 - distPast * 0.25);
+    pushX = ng.dir.x * tentMm;
+    pushY = ng.dir.y * tentMm;
+  }
+
+  const shiftedCalyces = {};
+  for (const k of Object.keys(base.calyces)) {
+    const c = base.calyces[k];
+    shiftedCalyces[k] = {
+      ...c,
+      x: c.x + pushX,
+      y: c.y + dy + pushY,
+      cupR: c.cupR + (state.hydro ? 2.2 : 0)
+    };
+  }
+
+  return {
+    ...base,
+    pelvis: { x: base.pelvis.x + pushX, y: base.pelvis.y + dy + pushY, z: base.pelvis.z },
+    calyces: shiftedCalyces,
+    targetCalyx: shiftedCalyces[state.targetKey],
+    antCalyx: { x: base.antCalyx.x + pushX, y: base.antCalyx.y + dy + pushY, z: base.antCalyx.z }
+  };
+}
+
+function project3D(pt, iso) {
+  const dx = pt.x - iso.x;
+  const dy = pt.y - iso.y;
+  const dz = pt.z - iso.z;
+  const a = state.cArmAx * Math.PI / 180;
+  const b = state.cArmOb * Math.PI / 180;
+  const x1 = dx * Math.cos(a) + dz * Math.sin(a);
+  const z1 = -dx * Math.sin(a) + dz * Math.cos(a);
+  const y2 = dy * Math.cos(b) - z1 * Math.sin(b);
+  return { u: x1, v: y2 };
+}
+
+function injectNeedleContrast() {
+  const diag = computeDiagnostics();
+  const ng = getNeedle3D();
+  state.lihDirty = true;
+
+  const badge = document.getElementById('statusBadge');
+  const txt = document.getElementById('statusText');
+
+  if (diag.inTarget) {
+    state.hydro = true;
+    document.getElementById('btnHydro').classList.add('active');
+    badge.className = 'badge-pill b-ok';
+    badge.textContent = 'INTRALUMINAL PYELOGRAM OPACIFICATION';
+    txt.innerHTML = 'Contrast injected cleanly into the target calyx and renal pelvis, confirming intraluminal position.';
+  } else {
+    state.blushClouds.push({
+      x: ng.tip.x,
+      y: ng.tip.y,
+      z: ng.tip.z,
+      r: 13 + Math.random() * 5
+    });
+    document.getElementById('clearBlushBtn').style.display = 'inline-block';
+    badge.className = 'badge-pill b-err';
+    badge.textContent = 'CONTRAST EXTRAVASATION ("BLUSH" CLOUD)!';
+    txt.innerHTML = `You injected contrast while the needle tip was in <b>${diag.layer}</b>! Extravasated contrast now obscures the calyx. Always verify urine efflux before injecting.`;
+  }
+}
+
+function clearBlush() {
+  state.blushClouds = [];
+  state.lihDirty = true;
+  document.getElementById('clearBlushBtn').style.display = 'none';
+}
+
+function pullStylet() {
+  state.styletPulled = true;
+  state.blindRevealed = true;
+  state.lihDirty = true;
+  const diag = computeDiagnostics();
+  const badge = document.getElementById('statusBadge');
+  const txt = document.getElementById('statusText');
+
+  if (diag.inTarget) {
+    badge.className = 'badge-pill b-ok';
+    badge.textContent = 'CLEAR URINE / METHYLENE BLUE EFFLUX!';
+    txt.innerHTML = `Transpapillary entry into <b>${getTargetCalyxBase().label}</b> confirmed! Infundibular dog-leg angle: <b>${diag.dogLegDeg.toFixed(1)}°</b>. Click <b>"2. Steer Guidewire →"</b>.`;
+  } else if (diag.inAnt) {
+    badge.className = 'badge-pill b-warn';
+    badge.textContent = 'ANTERIOR CALYX TRAP (EXCESSIVE TORQUE)';
+    txt.innerHTML = `Efflux present, but you entered an <b>Anterior Calyx</b>. Navigating to the pelvis requires a >90° hairpin turn.`;
+  } else if (diag.inInfundibulumWall) {
+    badge.className = 'badge-pill b-err';
+    badge.textContent = 'VENOUS HEMORRHAGE — INFUNDIBULAR PUNCTURE';
+    txt.innerHTML = `Direct infundibular neck puncture! You bypassed the avascular papilla (Brödel's plane) and lacerated interlobar vessels.`;
+  } else {
+    badge.className = 'badge-pill b-warn';
+    badge.textContent = 'DRY TAP (NO EFFLUX)';
+    txt.innerHTML = `Tip is in <b>${diag.layer}</b> (${diag.distToCalyx.toFixed(1)} mm from target papilla). Check both <b>0° AP</b> and <b>+30° Ceph</b> views—looking centered on a single oblique view is a 2D projection illusion if the other plane is off!`;
+  }
+  updateDiagnosticsAndCoach();
+}
+
+function goToWireStage() {
+  const diag = computeDiagnostics();
+  if (!diag.inTarget) {
+    pullStylet();
+    return;
+  }
+  setStage(2);
+  evaluateWireProgress();
+}
+
+function getOptimalTerumoTorqueForCor(corDeg, calCorDeg) {
+  const rawMismatch = corDeg - calCorDeg;
+  return ((180 + Math.round(rawMismatch * 2.5)) % 360 + 360) % 360;
+}
+
+function getOptimalTerumoTorque() {
+  const c = getLiveAnatomy();
+  const { trueCorDeg } = getTrueCalyxAngles(c.targetCalyx, c.pelvis);
+  return getOptimalTerumoTorqueForCor(state.corDeg, trueCorDeg);
+}
+
+function autoSteerTerumo() {
+  state.terumoTorqueDeg = getOptimalTerumoTorque();
+  state.wireAdvMm = 88;
+  syncAllUI();
+  evaluateWireProgress();
+}
+
+function stepWire(delta) {
+  state.wireAdvMm = Math.max(0, Math.min(100, state.wireAdvMm + delta));
+  syncAllUI();
+  evaluateWireProgress();
+}
+
+function evaluateWireProgress() {
+  const diag = computeDiagnostics();
+  const badge = document.getElementById('statusBadge');
+  const txt = document.getElementById('statusText');
+  const idealTorque = getOptimalTerumoTorque();
+  document.getElementById('sweetSpotHint').textContent = !state.blindMode
+    ? `Sweet Spot: ~${idealTorque}°`
+    : `Torque Vise (0°–360°)`;
+
+  if (!diag.inTarget) {
+    state.wireInPelvis = false;
+    badge.className = 'badge-pill b-err';
+    badge.textContent = 'NEEDLE NOT IN CALYX';
+    txt.innerHTML = 'Return to Stage 1 and place the needle tip inside the calyceal cup before advancing the wire.';
+    return;
+  }
+
+  const isImpactedStaghorn = CASES[state.caseIdx].stoneType === 'staghorn' || state.caseIdx === 4;
+  const torqueDiff = Math.min(
+    Math.abs(state.terumoTorqueDeg - idealTorque),
+    360 - Math.abs(state.terumoTorqueDeg - idealTorque)
+  );
+
+  const needsPreciseTorque = diag.dogLegDeg > 16 || isImpactedStaghorn;
+  const torqueAligned = !needsPreciseTorque || torqueDiff <= 38;
+
+  if (state.wireAdvMm >= 55 && torqueAligned && diag.dogLegDeg <= 35) {
+    state.wireInPelvis = true;
+    badge.className = 'badge-pill b-ok';
+    badge.textContent = 'TERUMO WIRE NEGOTIATED INTO PELVIS & URETER!';
+    txt.innerHTML = `Angled hydrophilic tip deflected past the stone edge and across the infundibular neck into the ureter. Now advance the <b>5Fr Kumpe Catheter</b> and swap for an <b>Amplatz Super Stiff Wire</b>.`;
+  } else if (state.wireAdvMm >= 35) {
+    state.wireInPelvis = false;
+    badge.className = 'badge-pill b-warn';
+    if (diag.dogLegDeg > 35) {
+      badge.textContent = `SEVERE DOG-LEG (${diag.dogLegDeg.toFixed(0)}°) — WIRE BLOCKED`;
+      txt.innerHTML = `Your needle entered at a <b>${diag.dogLegDeg.toFixed(1)}° angle</b> to the infundibulum (Pure Bull's Eye Roof-Entry Trap!). Return to Stage 1 (0° AP) and align Coronal Aim with the infundibulum.`;
+    } else {
+      badge.textContent = 'WIRE BOUNCING OFF STONE / NECK WALL';
+      txt.innerHTML = `Rotate the <b>Terumo Tip Torque Vise</b> toward <b>~${idealTorque}°</b> (or click Auto-Torque Tip) so the bevel slips past the stone rim!`;
+    }
+  }
+  updateDiagnosticsAndCoach();
+}
+
+function toggleKumpe() {
+  if (!state.wireInPelvis) return;
+  state.kumpeAdvanced = !state.kumpeAdvanced;
+  state.lihDirty = true;
+  document.getElementById('btnKumpe').classList.toggle('active', state.kumpeAdvanced);
+  updateDiagnosticsAndCoach();
+}
+
+function exchangeStiffWire() {
+  if (!state.wireInPelvis) return;
+  state.stiffWireExchanged = true;
+  state.lihDirty = true;
+  document.getElementById('btnStiff').classList.add('active');
+  const badge = document.getElementById('statusBadge');
+  const txt = document.getElementById('statusText');
+  badge.className = 'badge-pill b-ok';
+  badge.textContent = '0.035" AMPLATZ SUPER STIFF WIRE SECURED!';
+  txt.innerHTML = 'Working wire locked down the ureter. Proceed to <b>Stage 3: Tract Dilation</b>.';
+  updateDiagnosticsAndCoach();
+}
+
+function matchDilatorAngle() {
+  state.dilPitchDeg = state.pitchDeg;
+  state.wireKinked = false;
+  syncAllUI();
+  evaluateDilationPhysics();
+}
+
+function evaluateDilationPhysics() {
+  const pitchMismatch = Math.abs(state.dilPitchDeg - state.pitchDeg);
+  const badge = document.getElementById('statusBadge');
+  const txt = document.getElementById('statusText');
+  const cal = getTargetCalyxBase();
+
+  const kinkThreshold = state.stiffWireExchanged ? 6.5 : 3.5;
+  state.wireKinked = state.rodDepthMm > 25 && pitchMismatch > kinkThreshold;
+
+  if (state.wireKinked) {
+    badge.className = 'badge-pill b-err';
+    badge.textContent = `GUIDEWIRE KINKED AT FASCIA! (MISMATCH: ${pitchMismatch.toFixed(1)}°)`;
+    txt.innerHTML = `Dilator pitch (<b>${state.dilPitchDeg.toFixed(1)}°</b>) deviates from the wire vector (<b>${state.pitchDeg.toFixed(1)}°</b>), kinking the wire at the lumbodorsal fascia!`;
+  } else if (state.rodDepthMm > state.depthMm + 14) {
+    badge.className = 'badge-pill b-err';
+    badge.textContent = 'MEDIAL RENAL PELVIS PERFORATION!';
+    txt.innerHTML = `Over-advancing the Alken guide rod past the calyceal cup (${state.rodDepthMm} mm vs target ${Math.round(state.depthMm)} mm) perforates the medial pelvic wall!`;
+  } else if (state.sheathDepthMm > 30 && state.sheathDepthMm < state.depthMm - 8) {
+    badge.className = 'badge-pill b-warn';
+    badge.textContent = 'UNDER-DILATION TRAP: SHEATH STOPPED IN PERINEPHRIC FAT!';
+    txt.innerHTML = `24 Fr Amplatz sheath (${state.sheathDepthMm} mm) is parked short of the calyceal cup (${Math.round(state.depthMm)} mm)! Nephroscopy shows yellow perinephric fat ("white-out").`;
+  } else if (Math.abs(state.sheathDepthMm - state.depthMm) <= 7 && state.rodDepthMm >= state.depthMm - 4) {
+    badge.className = 'badge-pill b-ok';
+    badge.textContent = '24 Fr AMPLATZ SHEATH PARKED IN CALYCEAL CUP!';
+    txt.innerHTML = `Optimal coaxial tract dilation complete! Use the <b>Rigid Nephroscope Sweep</b> slider to inspect stone clearance reach and parenchymal torque.`;
+  }
+
+  const diag = computeDiagnostics();
+  const effectiveTorqueStress = Math.round(diag.dogLegDeg * 0.9 + Math.abs(state.scopeSweepDeg) * 1.1);
+  const torqueColor = effectiveTorqueStress < 28 ? '#4ade80' : (effectiveTorqueStress < 45 ? '#fbbf24' : '#f87171');
+  document.getElementById('torqueScoreBox').innerHTML = `
+    <div><b>Selected Calyx:</b> ${cal.label} (True Axial: ${cal.axialDeg}°)</div>
+    <div><b>Rigid Scope Stone Reach:</b> <span style="color:#38bdf8;font-weight:700;">${cal.reachPct}% of Pelvicalyceal System</span></div>
+    <div><b>Infundibular Torque Stress:</b> <span style="color:${torqueColor};font-weight:700;">${effectiveTorqueStress} N·cm (${effectiveTorqueStress < 28 ? 'Safe Fulcrum' : (effectiveTorqueStress < 45 ? 'Moderate Torque' : 'DANGER: Infundibular Tear Risk!')})</span></div>
+  `;
+  updateDiagnosticsAndCoach();
+}
+
+function computeDiagnostics() {
+  const c = getLiveAnatomy();
+  const ng = getNeedle3D();
+  const cal = c.targetCalyx;
+  const { trueCorDeg } = getTrueCalyxAngles(cal, c.pelvis);
+
+  const distToCalyx = Math.hypot(ng.tip.x - cal.x, ng.tip.y - cal.y, ng.tip.z - cal.z);
+  const distToAnt = Math.hypot(ng.tip.x - c.antCalyx.x, ng.tip.y - c.antCalyx.y, ng.tip.z - c.antCalyx.z);
+
+  const infVec = getInfundibularUnitVector(cal);
+  const dot = Math.max(-1, Math.min(1, ng.dir.x * infVec.x + ng.dir.y * infVec.y + ng.dir.z * infVec.z));
+  const dogLegDeg = Math.acos(dot) * 180 / Math.PI;
+  const coronalMismatch = Math.abs(ng.effCor - trueCorDeg);
+
+  const colonRisk = ng.skinEntry.x > 126;
+  const paraspinalRisk = ng.skinEntry.x < 54;
+
+  const ribCol = computeRibBoneCollision(c, ng.skinEntry, ng.dir);
+  const ribHit = ribCol.anyRibHit && state.depthMm >= ribCol.tRibMm - 0.5;
+  const intercostalHit = ribCol.intercostalArteryRisk && state.depthMm >= ribCol.tRibMm;
+
+  const pleuraBorderY = c.pleuraY + (state.respMode === 'insp' ? -10 : 8);
+  const pleuraHit = state.depthMm >= ribCol.tRibMm && ribCol.yAtRib > pleuraBorderY;
+
+  // True intraluminal entry: tip must be inside the calyceal cup radius (<= 6.2mm)
+  // AND within +-4.2mm of the calyx Z-depth so it matches both the 0° AP and 30° Oblique screens!
+  const xyDist = Math.hypot(ng.tip.x - cal.x, ng.tip.y - cal.y);
+  const zErr = Math.abs(ng.tip.z - cal.z);
+  const inTarget = !ribHit && (distToCalyx <= 6.2) && (xyDist <= 5.8) && (zErr <= 4.2);
+
+  let layer = "0mm: On Skin Surface (Point B)";
+  let resistanceN = 0.0;
+  let popZone = 'none';
+  let dimpleFactor = 0.0;
+
+  if (ribHit) {
+    layer = `BONE BLOCK: ${ribCol.whichRib} Periosteum (${Math.round(ribCol.tRibMm)}mm) — CANNOT ADVANCE!`;
+    resistanceN = 9.5;
+    popZone = 'fascia';
+  } else if (state.depthMm <= 0.5) {
+    layer = "0mm: On Skin Surface (Point B)";
+    resistanceN = 0.0;
+  } else if (state.depthMm > 0.5 && state.depthMm <= 3.5) {
+    layer = "Skin Dermis Puncture [Skin Pop]";
+    resistanceN = 3.2;
+    popZone = 'skin';
+  } else if (ng.tip.z > 2.5 && ng.tip.z <= 23) {
+    layer = "Subcutaneous Fat (Safe Pivot Zone)";
+    resistanceN = 0.8;
+  } else if (ng.tip.z > 23 && ng.tip.z <= 29) {
+    layer = "Lumbodorsal Fascia [1st Pop -> Switch View!]";
+    resistanceN = 6.8;
+    popZone = 'fascia';
+  } else if (inTarget) {
+    layer = "Posterior Calyceal Lumen [Intraluminal ✓]";
+    resistanceN = 0.2;
+    popZone = 'papilla';
+  } else if (distToCalyx <= cal.cupR + 4) {
+    const whyMiss = zErr > 4.2
+      ? (ng.tip.z < cal.z ? `${Math.round(cal.z - ng.tip.z)}mm Too Superficial/Posterior` : `${Math.round(ng.tip.z - cal.z)}mm Too Deep/Anterior`)
+      : `${xyDist.toFixed(1)}mm Off-Center (Check 0° AP View!)`;
+    layer = `Calyceal Outer Rim (${whyMiss})`;
+    resistanceN = 4.8;
+    dimpleFactor = Math.max(0, 1.0 - (distToCalyx - 5.5) / 8);
+  } else if (ng.tip.z > 29) {
+    layer = "Perinephric Space / Renal Cortex";
+    resistanceN = 1.6;
+  }
+
+  if (popZone !== 'none' && popZone !== state.lastPopZone) {
+    playTactilePop(popZone);
+  }
+  state.lastPopZone = popZone;
+
+  const inInfundibulumWall = !ribHit && !inTarget && distToCalyx < 17 && ng.tip.x < cal.x - 5;
+  const inAnt = !ribHit && distToAnt <= 8.5;
+
+  const iso = { x: 74, y: 4, z: cal.z };
+  const pTip = project3D(ng.tip, iso);
+  const pHub = project3D(ng.hub, iso);
+  const coaxialErr = Math.hypot(pTip.u - pHub.u, pTip.v - pHub.v);
+
+  return {
+    distToCalyx,
+    xyDist,
+    zErr,
+    dogLegDeg,
+    coronalMismatch,
+    trueCorDeg,
+    colonRisk,
+    paraspinalRisk,
+    ribHit,
+    whichRib: ribCol.whichRib,
+    ribBlockDepthMm: ribCol.tRibMm,
+    onRibTrajectory: ribCol.anyRibHit,
+    intercostalHit,
+    pleuraHit,
+    layer,
+    resistanceN,
+    dimpleFactor,
+    inTarget,
+    inInfundibulumWall,
+    inAnt,
+    coaxialErr,
+    tipZ: ng.tip.z,
+    calZ: cal.z,
+    isSagging: ng.isSagging,
+    isPendulumSwinging: ng.isPendulumSwinging
+  };
+}
+
+function updateDiagnosticsAndCoach() {
+  const d = computeDiagnostics();
+  const cal = getTargetCalyxBase();
+  const opt = computeOptimalGeometryForTechnique(state.coachMode);
+
+  // Show exact 3D diagnostic telemetry right in the Workbench header badge (never clipped!)
+  const dPitch = state.pitchDeg - opt.pitchDeg;
+  const dZ = Math.round(d.tipZ - d.calZ);
+  document.getElementById('tissueBadge').textContent = !state.blindMode
+    ? `${d.layer}  |  3D Dist: ${d.distToCalyx.toFixed(1)}mm  |  Z-Depth: ${Math.round(d.tipZ)}/${d.calZ}mm (${dZ === 0 ? 'Exact' : (dZ > 0 ? '+' + dZ + 'mm Deep' : dZ + 'mm Shallow')})  |  Ideal Pitch: ${opt.pitchDeg.toFixed(1)}°`
+    : d.layer;
+
+  document.getElementById('hapticLayerText').textContent = `HAPTIC: ${d.layer}`;
+  document.getElementById('hapticForceVal').textContent = `${d.resistanceN.toFixed(1)} N`;
+  document.getElementById('hapticFill').style.width = `${Math.min(100, (d.resistanceN / 9.5) * 100)}%`;
+
+  const guideBox = document.getElementById('tacticalGuideBox');
+  if (guideBox) {
+    guideBox.style.display = state.blindMode ? 'none' : 'block';
+    if (!state.blindMode) {
+      guideBox.innerHTML = buildTacticalGuideHTML(opt, cal);
+    }
+  }
+
+  const respLockedCorrectly = state.respMode === opt.respMode;
+  const sheathDone = Math.abs(state.sheathDepthMm - state.depthMm) <= 7 && !state.wireKinked && state.sheathDepthMm > 30;
+  let steps = [];
+  if (state.coachMode === 'hybrid') {
+    steps = [
+      { done: respLockedCorrectly && state.visited0AP && d.coronalMismatch <= 6 && !d.onRibTrajectory, text: `1. 0° AP: Lock ${opt.respMode.toUpperCase()} Hold, set Point B (L=${opt.latCm.toFixed(1)}, CC=${opt.ccCm.toFixed(1)}) & Coronal (${opt.corDeg.toFixed(1)}°).` },
+      { done: state.depthMm >= opt.fasciaDepthMm - 1 && !d.ribHit, text: `2. 0° AP: Pierce Skin (3mm) → Lumbodorsal Fascia [1st Pop at ${opt.fasciaDepthMm}mm].` },
+      { done: state.visited30Ax && d.coaxialErr < 10 && state.depthMm >= opt.fasciaDepthMm, text: `3. Rotate C-Arm AT FASCIA (${opt.fasciaDepthMm}mm) to +${cal.axialDeg}° Axial: Lock Pitch (${opt.pitchDeg.toFixed(1)}°).` },
+      { done: d.inTarget && state.styletPulled, text: `4. Return to 0° AP in Gerota's Fat (~${opt.tractDistMm - 12}mm) → Watch Dimple & Pop Papilla (${opt.tractDistMm}mm).` },
+      { done: state.wireInPelvis && state.stiffWireExchanged, text: "5. Stage 2: Steer Terumo wire down ureter & swap to Super Stiff." },
+      { done: sheathDone, text: "6. Stage 3: Coaxial dilation & park 24Fr Amplatz sheath." }
+    ];
+  } else if (state.coachMode === 'triangulation') {
+    steps = [
+      { done: respLockedCorrectly && state.visited0AP && d.coronalMismatch <= 6 && state.depthMm >= opt.fasciaDepthMm - 1 && !d.ribHit, text: `1. Plane 1 (0° AP): Lock ${opt.respMode.toUpperCase()}, align Coronal (${opt.corDeg.toFixed(1)}°) & punch Fascia [1st Pop at ${opt.fasciaDepthMm}mm].` },
+      { done: state.visited30Ob && d.inTarget && state.styletPulled, text: `2. Plane 2 (+30° Ceph AT ${opt.fasciaDepthMm}mm Fascia): Read parallax, set Pitch (${opt.pitchDeg.toFixed(1)}°) & pop Papilla (${opt.tractDistMm}mm).` },
+      { done: state.wireInPelvis && state.stiffWireExchanged, text: "3. Stage 2: Steer Terumo wire down ureter & swap to Super Stiff." },
+      { done: sheathDone, text: "4. Stage 3: Coaxial Alken/Amplatz dilation into calyceal cup." }
+    ];
+  } else {
+    steps = [
+      { done: respLockedCorrectly && state.visited30Ax && d.coaxialErr < 8 && state.depthMm >= opt.fasciaDepthMm - 1 && !d.ribHit, text: `1. +${cal.axialDeg}° Oblique: Lock ${opt.respMode.toUpperCase()}, superimpose hub-over-tip dot & punch Fascia (${opt.fasciaDepthMm}mm).` },
+      { done: d.inTarget && state.styletPulled, text: `2. Switch to 0° AP at ~${opt.tractDistMm - 12}mm (Gerota's Fat): Watch dimple, pop in (${opt.tractDistMm}mm) & pull stylet.` },
+      { done: state.wireInPelvis && state.stiffWireExchanged, text: "3. Stage 2: Torque Terumo wire across neck & swap to Super Stiff." },
+      { done: sheathDone, text: "4. Stage 3: Dilate tract & park 24Fr Amplatz sheath." }
+    ];
+  }
+
+  let curFound = false;
+  document.getElementById('coachList').innerHTML = steps.map(s => {
+    let cls = 'coach-item';
+    let sym = '[ ]';
+    if (s.done) { cls += ' done'; sym = '[✓]'; }
+    else if (!curFound) { cls += ' active'; sym = '[→]'; curFound = true; }
+    return `<li class="${cls}"><span style="font-family:monospace;font-weight:700;">${sym}</span><span>${s.text}</span></li>`;
+  }).join('');
+
+  if (state.stage === 1 && !state.styletPulled) {
+    const badge = document.getElementById('statusBadge');
+    const txt = document.getElementById('statusText');
+    if (d.ribHit) {
+      badge.className = 'badge-pill b-err';
+      badge.textContent = `HARD BONE BLOCK: ${d.whichRib.toUpperCase()} PERIOSTEAL STRIKE (${d.ribBlockDepthMm} MM)!`;
+      txt.innerHTML = `Needle tip struck solid bone on the <b>${d.whichRib}</b> at <b>${d.ribBlockDepthMm} mm</b> and cannot advance deeper! Retract and move Point B off the rib.`;
+    } else if (d.onRibTrajectory) {
+      badge.className = 'badge-pill b-warn';
+      badge.textContent = `WARNING: POINT B OVER ${d.whichRib.toUpperCase()} (WILL HIT BONE AT ${d.ribBlockDepthMm} MM)`;
+      txt.innerHTML = `Your skin entry / trajectory is aimed directly into the <b>${d.whichRib}</b>! Move Point B into the intercostal or subcostal space.`;
+    } else if (d.intercostalHit) {
+      badge.className = 'badge-pill b-err';
+      badge.textContent = 'SUBCOSTAL NEUROVASCULAR BUNDLE LACERATION!';
+      txt.innerHTML = 'Needle hugged the inferior border of the rib, lacerating the intercostal artery! Always enter along the superior border of the lower rib.';
+    } else if (d.colonRisk) {
+      badge.className = 'badge-pill b-err';
+      badge.textContent = 'COLON PERFORATION HAZARD (>PAL)';
+      txt.innerHTML = 'Skin entry is lateral to the Posterior Axillary Line (>12.6 cm). Reduce Lateral Offset L.';
+    } else if (d.pleuraHit) {
+      badge.className = 'badge-pill b-err';
+      badge.textContent = 'PLEURAL TRANGRESSION (HYDROTHORAX RISK)';
+      txt.innerHTML = 'Supracostal needle crossed the pleura! Lock ventilation in <b>Resp: Exp Hold</b> and stay in the 11th–12th ICS.';
+    } else if (d.isPendulumSwinging) {
+      badge.className = 'badge-pill b-warn';
+      badge.textContent = 'RESPIRATORY PENDULUM SIGN (WINDSHIELD-WIPER HUB)';
+      txt.innerHTML = 'Kidney excursion during Tidal breathing is swinging the anchored needle! Lock ventilation (<b>Insp/Exp Hold</b>) before advancing or dilating.';
+    } else if (d.isSagging) {
+      badge.className = 'badge-pill b-warn';
+      badge.textContent = 'GRAVITY SAG ACTIVE (BEFORE FASCIA)';
+      txt.innerHTML = 'Because the Radiolucent Clamp is OFF and the tip has not yet anchored in the lumbodorsal fascia, hub weight is drooping the needle downward by 8°!';
+    } else {
+      badge.className = d.inTarget ? 'badge-pill b-ok' : 'badge-pill b-info';
+      badge.textContent = `DOG-LEG: ${d.dogLegDeg.toFixed(1)}° | DEPTH: ${Math.round(state.depthMm)}/${opt.tractDistMm} MM | 3D MISS: ${d.distToCalyx.toFixed(1)} MM`;
+      txt.innerHTML = `<b>${d.layer}</b> — Target: <b>${cal.label}</b> (Z-Depth: <b>${Math.round(d.tipZ)}/${d.calZ} mm</b> | Ideal Pitch for your Point B: <b>${(Math.atan2(Math.hypot(state.latCm*10, state.ccCm*10), cal.z)*180/Math.PI).toFixed(1)}°</b>).`;
+    }
+  }
+}
+
+// Post-Blit Canvas Hook for Scrubber, Target Circle & 11th Rib
+(function installCanvasHooks() {
+  let lastFrameTime = performance.now();
+  const origDrawImage = fCtx.drawImage.bind(fCtx);
+
+  fCtx.drawImage = function(...args) {
+    origDrawImage(...args);
+
+    const now = performance.now();
+    const dt = Math.min(0.1, (now - lastFrameTime) / 1000);
+    lastFrameTime = now;
+
+    const isFiring = state.contFluoro || state.pedalDown || state.autoPlaying;
+    if (isFiring) {
+      const obFactor = (Math.abs(state.cArmAx) + Math.abs(state.cArmOb)) / 45;
+      const obeseFactor = state.caseIdx === 4 ? 1.55 : 1.0;
+      const extraMgy = dt * 0.042 * (obFactor * 0.8 + (obeseFactor - 1));
+      if (extraMgy > 0) {
+        state.fluoroDose += extraMgy;
+        const fdEl = document.getElementById('fluoroDoseText');
+        if (fdEl) fdEl.textContent = state.fluoroDose.toFixed(2) + ' mGy';
+      }
+    }
+
+    const fw = fluoroCanvas.width;
+    const fh = fluoroCanvas.height;
+    if (fw <= 0 || fh <= 0) return;
+
+    const c = getLiveAnatomy();
+    const cal = getTargetCalyxBase();
+    const opt = computeOptimalGeometryForTechnique(state.coachMode);
+    const d = computeDiagnostics();
+
+    fCtx.save();
+
+    // Right-Edge Touch Depth Scrubber
+    const sx = fw - 24;
+    const syTop = 44;
+    const syBot = fh - 44;
+    const sHeight = syBot - syTop;
+
+    fCtx.fillStyle = 'rgba(15, 23, 42, 0.86)';
+    fCtx.strokeStyle = '#334155';
+    fCtx.lineWidth = 1.2;
+    fCtx.fillRect(sx - 9, syTop, 18, sHeight);
+    fCtx.strokeRect(sx - 9, syTop, 18, sHeight);
+
+    if (!state.blindMode) {
+      if (d.onRibTrajectory) {
+        const yRib = syTop + (d.ribBlockDepthMm / 125) * sHeight;
+        fCtx.strokeStyle = '#ef4444';
+        fCtx.lineWidth = 2.5;
+        fCtx.beginPath(); fCtx.moveTo(sx - 10, yRib); fCtx.lineTo(sx + 10, yRib); fCtx.stroke();
+      }
+      const yFascia = syTop + (opt.fasciaDepthMm / 125) * sHeight;
+      const yCalyx  = syTop + (opt.tractDistMm / 125) * sHeight;
+
+      fCtx.strokeStyle = '#f59e0b';
+      fCtx.lineWidth = 2;
+      fCtx.beginPath(); fCtx.moveTo(sx - 8, yFascia); fCtx.lineTo(sx + 8, yFascia); fCtx.stroke();
+
+      fCtx.strokeStyle = '#22c55e';
+      fCtx.lineWidth = 2;
+      fCtx.beginPath(); fCtx.moveTo(sx - 8, yCalyx); fCtx.lineTo(sx + 8, yCalyx); fCtx.stroke();
+    }
+
+    const yCur = syTop + Math.min(1, state.depthMm / 125) * sHeight;
+    fCtx.fillStyle = d.ribHit ? '#ef4444' : (d.inTarget ? '#22c55e' : '#38bdf8');
+    fCtx.beginPath();
+    fCtx.arc(sx, yCur, 6.5, 0, Math.PI * 2);
+    fCtx.fill();
+    fCtx.restore();
+
+    // Draw 11th Rib & Rib Warning on Flank Map
+    const sw = skinCanvas.width;
+    const sh = skinCanvas.height;
+    if (sw > 0 && sh > 0) {
+      const sScale = sw / 180;
+      const ox = 20 * sScale;
+      const oy = sh * 0.52;
+      const toS = (wx, wy) => ({ x: ox + wx * sScale, y: oy - wy * sScale });
+
+      sCtx.save();
+      const r11a = toS(26, c.rib12Y + 28 + 14);
+      const r11b = toS(74, c.rib12Y + 28 + 4);
+      const r11c = toS(118, c.rib12Y + 28 - 5);
+      sCtx.beginPath();
+      sCtx.moveTo(r11a.x, r11a.y);
+      sCtx.quadraticCurveTo(r11b.x, r11b.y, r11c.x, r11c.y);
+      sCtx.lineWidth = 7.5 * sScale;
+      sCtx.strokeStyle = 'rgba(148, 163, 184, 0.28)';
+      sCtx.lineCap = 'round';
+      sCtx.stroke();
+      sCtx.fillStyle = '#94a3b8';
+      sCtx.font = '9px sans-serif';
+      sCtx.fillText('11th Rib', r11a.x + 6, r11a.y - 5);
+
+      if (d.onRibTrajectory) {
+        sCtx.fillStyle = 'rgba(220, 38, 38, 0.9)';
+        sCtx.fillRect(6, sh - 22, sw - 12, 17);
+        sCtx.fillStyle = '#fff';
+        sCtx.font = 'bold 9px monospace';
+        sCtx.textAlign = 'center';
+        sCtx.fillText(`⛔ ${d.whichRib.toUpperCase()} BONE BLOCK (${d.ribBlockDepthMm}MM) — MOVE POINT B!`, sw / 2, sh - 10);
+      }
+      sCtx.restore();
+    }
+  };
+
+  updateDiagnosticsAndCoach();
+})();
