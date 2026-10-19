@@ -2073,3 +2073,225 @@ function updateDiagnosticsAndCoach() {
 
   requestAnimationFrame(postRenderOverlay);
 })();
+// ============================================================================
+// v5.5 STRICT INTRALUMINAL HIT-BOX & POST-BLIT CANVAS HOOK
+// Replace the `hookRendererUpgrades` IIFE at the bottom of physics.js with this
+// ============================================================================
+(function installStrictLumenAndCanvasHooks() {
+  // 1. Tighten Intraluminal Detection so grazing the outer rim (6.4mm) is NOT called Intraluminal!
+  const origComputeDiag = window.computeDiagnostics;
+  window.computeDiagnostics = function() {
+    const d = origComputeDiag();
+    const c = getLiveAnatomy();
+    const ng = getNeedle3D();
+    const cal = c.targetCalyx;
+
+    // True intraluminal entry requires tip to be inside the contrast cup core (<= 5.0mm)
+    // and within +-3.8mm of the calyx Z-plane (not overshot anteriorly or sitting on the outer rim!)
+    const xyDist = Math.hypot(ng.tip.x - cal.x, ng.tip.y - cal.y);
+    const zErr = Math.abs(ng.tip.z - cal.z);
+    const strictlyInLumen = !d.ribHit && (d.distToCalyx <= 5.0) && (xyDist <= 4.8) && (zErr <= 3.8);
+
+    if (d.inTarget && !strictlyInLumen) {
+      d.inTarget = false;
+      if (ng.tip.z > cal.z + 3.5) {
+        d.layer = "Anterior Calyceal Wall / Parenchymal Overshoot (Too Deep!)";
+        d.resistanceN = 4.2;
+      } else {
+        d.layer = "Calyceal Outer Rim / Fornix (Outside Lumen — Adjust Aim/Depth!)";
+        d.resistanceN = 4.8;
+      }
+    }
+    return d;
+  };
+
+  // 2. Hook fCtx.drawImage so our Fluoro HUD & Scrubber draw AFTER renderer.js blits lihCanvas!
+  let lastFrameTime = performance.now();
+  const origDrawImage = fCtx.drawImage.bind(fCtx);
+
+  fCtx.drawImage = function(...args) {
+    // Let renderer.js draw the X-ray buffer first
+    origDrawImage(...args);
+
+    // Immediately render our HUD, Target Ring & Scrubber on top so it NEVER gets wiped!
+    const now = performance.now();
+    const dt = Math.min(0.1, (now - lastFrameTime) / 1000);
+    lastFrameTime = now;
+
+    const isFiring = state.contFluoro || state.pedalDown || state.autoPlaying;
+    if (isFiring) {
+      const obFactor = (Math.abs(state.cArmAx) + Math.abs(state.cArmOb)) / 45;
+      const obeseFactor = state.caseIdx === 4 ? 1.55 : 1.0;
+      const extraMgy = dt * 0.042 * (obFactor * 0.8 + (obeseFactor - 1));
+      if (extraMgy > 0) {
+        state.fluoroDose += extraMgy;
+        const fdEl = document.getElementById('fluoroDoseText');
+        if (fdEl) fdEl.textContent = state.fluoroDose.toFixed(2) + ' mGy';
+      }
+    }
+
+    const fw = fluoroCanvas.width;
+    const fh = fluoroCanvas.height;
+    if (fw <= 0 || fh <= 0) return;
+
+    const c = getLiveAnatomy();
+    const cal = getTargetCalyxBase();
+    const opt = computeOptimalGeometryForTechnique(state.coachMode);
+    const d = computeDiagnostics();
+    const axDiff = Math.abs(state.cArmAx - cal.axialDeg);
+
+    fCtx.save();
+
+    // Draw True Intraluminal Target Bull's-Eye Zone on Fluoro (when not in Blind Mode)
+    // Uses the exact same iso {x:74, y:4, z:cal.z} that renderer.js uses so it aligns 100%!
+    if (!state.blindMode) {
+      const cx = fw / 2;
+      const cy = fh * 0.48;
+      const rad = Math.min(fw, fh) * 0.44;
+      const scale = rad / 74;
+      const rendererIso = { x: 74, y: 4, z: c.targetCalyx.z };
+      const pCal = project3D(c.targetCalyx, rendererIso);
+      const tx = cx + pCal.u * scale;
+      const ty = cy - pCal.v * scale;
+
+      fCtx.beginPath();
+      fCtx.arc(tx, ty, 4.8 * scale, 0, Math.PI * 2);
+      fCtx.strokeStyle = d.inTarget ? '#22c55e' : 'rgba(56, 189, 248, 0.75)';
+      fCtx.lineWidth = d.inTarget ? 2.5 : 1.5;
+      fCtx.setLineDash(d.inTarget ? [] : [3, 3]);
+      fCtx.stroke();
+      fCtx.setLineDash([]);
+    }
+
+    // Bottom-Left God-View 3D Telemetry Box
+    if (!state.blindMode) {
+      const dCor = state.corDeg - opt.corDeg;
+      const dPitch = state.pitchDeg - opt.pitchDeg;
+      const dZ = Math.round(d.tipZ - d.calZ);
+
+      fCtx.fillStyle = 'rgba(9, 13, 20, 0.88)';
+      fCtx.strokeStyle = d.ribHit ? '#ef4444' : (d.inTarget ? '#22c55e' : '#334155');
+      fCtx.lineWidth = 1.4;
+      fCtx.fillRect(10, fh - 72, 282, 62);
+      fCtx.strokeRect(10, fh - 72, 282, 62);
+
+      fCtx.font = 'bold 10px monospace';
+      fCtx.fillStyle = d.ribHit ? '#f87171' : (d.inTarget ? '#4ade80' : '#38bdf8');
+      fCtx.fillText(
+        d.ribHit ? `⛔ BLOCKED BY ${d.whichRib.toUpperCase()} (${d.ribBlockDepthMm}MM)` :
+        (d.inTarget ? `✓ INTRALUMINAL LOCK (${cal.label})` : `3D TELEMETRY — MISS DIST: ${d.distToCalyx.toFixed(1)}MM`),
+        16, fh - 57
+      );
+
+      fCtx.fillStyle = Math.abs(dCor) <= 3 ? '#4ade80' : '#fbbf24';
+      fCtx.fillText(`Coronal: ${state.corDeg.toFixed(1)}° (Ideal ${opt.corDeg.toFixed(1)}° | Δ${dCor >= 0 ? '+' : ''}${dCor.toFixed(1)}°)`, 16, fh - 43);
+
+      fCtx.fillStyle = Math.abs(dPitch) <= 2.5 ? '#4ade80' : '#fbbf24';
+      fCtx.fillText(`Pitch:   ${state.pitchDeg.toFixed(1)}° (Ideal ${opt.pitchDeg.toFixed(1)}° | Δ${dPitch >= 0 ? '+' : ''}${dPitch.toFixed(1)}°)`, 16, fh - 29);
+
+      fCtx.fillStyle = Math.abs(dZ) <= 3 ? '#4ade80' : '#f87171';
+      fCtx.fillText(`Depth Z: ${Math.round(d.tipZ)}mm / ${d.calZ}mm (${dZ < 0 ? Math.abs(dZ) + 'mm Superficial' : (dZ > 0 ? dZ + 'mm Too Deep' : 'ON DEPTH!')})`, 16, fh - 15);
+    }
+
+    if (axDiff <= 5 && (!state.blindMode || isFiring)) {
+      fCtx.fillStyle = 'rgba(16, 185, 129, 0.22)';
+      fCtx.strokeStyle = '#10b981';
+      fCtx.lineWidth = 1.5;
+      fCtx.fillRect(10, 10, 245, 24);
+      fCtx.strokeRect(10, 10, 245, 24);
+      fCtx.fillStyle = '#6ee7b7';
+      fCtx.font = 'bold 10.5px monospace';
+      fCtx.fillText(`◎ CALYX END-ON PROFILE (${cal.axialDeg}° AXIAL)`, 16, 26);
+    }
+
+    // Right-Edge Touch Depth Scrubber
+    const sx = fw - 24;
+    const syTop = 44;
+    const syBot = fh - 44;
+    const sHeight = syBot - syTop;
+
+    fCtx.fillStyle = 'rgba(15, 23, 42, 0.86)';
+    fCtx.strokeStyle = '#334155';
+    fCtx.lineWidth = 1.2;
+    fCtx.fillRect(sx - 9, syTop, 18, sHeight);
+    fCtx.strokeRect(sx - 9, syTop, 18, sHeight);
+
+    if (!state.blindMode) {
+      if (d.onRibTrajectory) {
+        const yRib = syTop + (d.ribBlockDepthMm / 125) * sHeight;
+        fCtx.strokeStyle = '#ef4444';
+        fCtx.lineWidth = 2.5;
+        fCtx.beginPath(); fCtx.moveTo(sx - 10, yRib); fCtx.lineTo(sx + 10, yRib); fCtx.stroke();
+        fCtx.fillStyle = '#f87171';
+        fCtx.font = 'bold 8px monospace';
+        fCtx.textAlign = 'right';
+        fCtx.fillText(`⛔${d.whichRib}`, sx - 11, yRib + 3);
+      }
+
+      const yFascia = syTop + (opt.fasciaDepthMm / 125) * sHeight;
+      const yCalyx  = syTop + (opt.tractDistMm / 125) * sHeight;
+
+      fCtx.strokeStyle = '#f59e0b';
+      fCtx.lineWidth = 2;
+      fCtx.beginPath(); fCtx.moveTo(sx - 8, yFascia); fCtx.lineTo(sx + 8, yFascia); fCtx.stroke();
+      fCtx.fillStyle = '#fbbf24';
+      fCtx.font = '8px monospace';
+      fCtx.textAlign = 'right';
+      fCtx.fillText(`1st(${opt.fasciaDepthMm})`, sx - 11, yFascia + 3);
+
+      fCtx.strokeStyle = '#22c55e';
+      fCtx.lineWidth = 2;
+      fCtx.beginPath(); fCtx.moveTo(sx - 8, yCalyx); fCtx.lineTo(sx + 8, yCalyx); fCtx.stroke();
+      fCtx.fillStyle = '#4ade80';
+      fCtx.fillText(`2nd(${opt.tractDistMm})`, sx - 11, yCalyx + 3);
+    }
+
+    const yCur = syTop + Math.min(1, state.depthMm / 125) * sHeight;
+    fCtx.fillStyle = d.ribHit ? '#ef4444' : (d.inTarget ? '#22c55e' : '#38bdf8');
+    fCtx.beginPath();
+    fCtx.arc(sx, yCur, 6.5, 0, Math.PI * 2);
+    fCtx.fill();
+    fCtx.fillStyle = '#f8fafc';
+    fCtx.font = 'bold 9px monospace';
+    fCtx.textAlign = 'right';
+    fCtx.fillText(`${Math.round(state.depthMm)}mm`, sx - 11, yCur + 3);
+    fCtx.restore();
+
+    // Also overlay 11th Rib & Rib Warning on Flank Map
+    const sw = skinCanvas.width;
+    const sh = skinCanvas.height;
+    if (sw > 0 && sh > 0) {
+      const sScale = sw / 180;
+      const ox = 20 * sScale;
+      const oy = sh * 0.52;
+      const toS = (wx, wy) => ({ x: ox + wx * sScale, y: oy - wy * sScale });
+
+      sCtx.save();
+      const r11a = toS(26, c.rib12Y + 28 + 14);
+      const r11b = toS(74, c.rib12Y + 28 + 4);
+      const r11c = toS(118, c.rib12Y + 28 - 5);
+      sCtx.beginPath();
+      sCtx.moveTo(r11a.x, r11a.y);
+      sCtx.quadraticCurveTo(r11b.x, r11b.y, r11c.x, r11c.y);
+      sCtx.lineWidth = 7.5 * sScale;
+      sCtx.strokeStyle = 'rgba(148, 163, 184, 0.28)';
+      sCtx.lineCap = 'round';
+      sCtx.stroke();
+      sCtx.fillStyle = '#94a3b8';
+      sCtx.font = '9px sans-serif';
+      sCtx.fillText('11th Rib', r11a.x + 6, r11a.y - 5);
+
+      if (d.onRibTrajectory) {
+        sCtx.fillStyle = 'rgba(220, 38, 38, 0.9)';
+        sCtx.fillRect(6, sh - 22, sw - 12, 17);
+        sCtx.fillStyle = '#fff';
+        sCtx.font = 'bold 9px monospace';
+        sCtx.textAlign = 'center';
+        sCtx.fillText(`⛔ ${d.whichRib.toUpperCase()} BONE BLOCK (${d.ribBlockDepthMm}MM) — MOVE POINT B!`, sw / 2, sh - 10);
+      }
+      sCtx.restore();
+    }
+  };
+
+  updateDiagnosticsAndCoach();
+})();
