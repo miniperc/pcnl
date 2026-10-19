@@ -2909,3 +2909,104 @@ function updateDiagnosticsAndCoach() {
 
   updateDiagnosticsAndCoach();
 })();
+// ============================================================================
+// ADD-ON: OSATS METRICS, FASCIAL SHEAR TRACKER & LIVE STEP-BY-STEP INSTRUCTOR
+// ============================================================================
+state.metrics = { punctures: 0, hasParenchymalTear: false, grade: 'A', feedback: [] };
+state.fasciaAnchored = false;
+state.fasciaEntryPitch = state.pitchDeg;
+state.fasciaEntryCor = state.corDeg;
+
+// Hook into updateDiagnosticsAndCoach without breaking original logic
+const _origUpdateDiag = updateDiagnosticsAndCoach;
+updateDiagnosticsAndCoach = function() {
+  _origUpdateDiag();
+
+  const ng = getNeedle3D();
+  if (ng.tip.z >= 26 && !state.fasciaAnchored) {
+    state.fasciaAnchored = true;
+    state.fasciaEntryPitch = state.pitchDeg;
+    state.fasciaEntryCor = state.corDeg;
+  } else if (ng.tip.z < 24) {
+    state.fasciaAnchored = false;
+  }
+
+  if (!state.autoPlaying && state.fasciaAnchored && state.depthMm > 45) {
+    if (Math.abs(state.pitchDeg - state.fasciaEntryPitch) > 5 ||
+        Math.abs(state.corDeg - state.fasciaEntryCor) > 6) {
+      state.metrics.hasParenchymalTear = true;
+    }
+  }
+
+  // Update Live Step-by-Step Instructor Box (if present in HTML)
+  const box = document.getElementById('liveStepInstructor');
+  if (!box) return;
+  const d = computeDiagnostics();
+  const opt = computeOptimalGeometryForTechnique(state.coachMode);
+
+  if (state.stage === 1) {
+    if (state.respMode === 'tidal') {
+      box.innerHTML = `<b>STEP 1 (RESPIRATION):</b> Click <b>Resp</b> to lock in <b>${opt.respMode === 'exp' ? 'Exp Hold (Supracostal Safety)' : 'Insp Hold'}</b>.`;
+    } else if (d.coronalMismatch > 6 || Math.abs(state.latCm - opt.latCm) > 0.6) {
+      box.innerHTML = `<b>STEP 2 (0° AP LINE):</b> At <b>0° AP</b>, set Point B near <b>L=${opt.latCm}cm, CC=${opt.ccCm}cm</b> and Coronal Aim to <b>${opt.corDeg}°</b> (or click <i>Snap Optimal Point B</i>).`;
+    } else if (Math.abs(state.pitchDeg - opt.pitchDeg) > 2.5) {
+      box.innerHTML = `<b>STEP 3 (PARALLAX / PITCH):</b> Tilt C-arm to <b>30° Ceph</b> or <b>30° Bull's Eye</b> and set Needle Pitch to <b>${opt.pitchDeg}°</b>.`;
+    } else if (!d.inTarget) {
+      box.innerHTML = `<b>STEP 4 (ADVANCE):</b> Advance needle to <b>${opt.tractDistMm} mm</b> (watch for Fascia Pop at ${opt.fasciaDepthMm}mm &amp; Calyceal Dimple).`;
+    } else if (!state.styletPulled) {
+      box.innerHTML = `<b>STEP 5 (VERIFY EFFLUX):</b> Inside calyx! Click <b>1. Pull Stylet (Efflux)</b>, then <b>2. Steer Guidewire →</b>.`;
+    }
+  } else if (state.stage === 2) {
+    if (!state.wireInPelvis) {
+      box.innerHTML = `<b>STAGE 2 (TERUMO WIRE):</b> Rotate Terumo Torque Vise to <b>~${getOptimalTerumoTorque()}°</b> and advance wire to <b>85+ mm</b>.`;
+    } else if (!state.stiffWireExchanged) {
+      box.innerHTML = `<b>STAGE 2 (EXCHANGE):</b> Click <b>1. Advance 5Fr Kumpe</b>, then <b>2. Swap Super Stiff Wire</b>.`;
+    } else {
+      box.innerHTML = `<b>STAGE 2 COMPLETE:</b> Click <b>Proceed to Stage 3: Tract Dilation →</b>.`;
+    }
+  } else if (state.stage === 3) {
+    box.innerHTML = `<b>STAGE 3 (DILATE):</b> Match Dilator Pitch to <b>${state.pitchDeg.toFixed(1)}°</b> and advance Rod &amp; 24Fr Sheath to <b>${Math.round(state.depthMm)} mm</b>.`;
+  }
+};
+
+function generateSurgicalReport() {
+  stopAutoSolve(true);
+  const d = computeDiagnostics();
+  let grade = "A";
+  const feedback = [];
+
+  if (state.fluoroSec > 30) {
+    grade = "B";
+    feedback.push("High Fluoro Time (>30s): Use short pedal taps and rely on tactile pops.");
+  }
+  if (d.dogLegDeg > 18 && d.dogLegDeg <= 30) {
+    grade = grade === "A" ? "B" : grade;
+    feedback.push(`Moderate Coronal Dog-Leg (${d.dogLegDeg.toFixed(1)}°): Align closer to the 0° AP infundibular axis.`);
+  } else if (d.dogLegDeg > 30) {
+    grade = "C";
+    feedback.push(`Severe Dog-Leg (${d.dogLegDeg.toFixed(1)}°): High risk of wire buckling and infundibular tear.`);
+  }
+  if (state.metrics.hasParenchymalTear) {
+    grade = "F";
+    feedback.push("CRITICAL: You pivoted the needle while buried deep past the fascia. Always retract to subcutaneous fat (<22mm) before changing angles!");
+  }
+  if (d.inAnt) {
+    grade = "D";
+    feedback.push("Anterior Calyx Entry: You overshot into an anterior calyx, creating a hairpin turn to the renal pelvis.");
+  }
+  if (feedback.length === 0) {
+    feedback.push("Textbook coaxial transpapillary access along Brödel's avascular plane!");
+  }
+
+  document.getElementById('reportGrade').textContent = grade;
+  document.getElementById('reportGrade').className = 'report-value grade-' + grade;
+  document.getElementById('reportFluoro').textContent = state.fluoroSec.toFixed(1) + 's';
+  document.getElementById('reportPunctures').textContent = Math.max(1, state.metrics.punctures);
+  document.getElementById('reportDogLeg').textContent = d.dogLegDeg.toFixed(1) + '°';
+  document.getElementById('reportFeedback').innerHTML = feedback.map(f => `<li>${f}</li>`).join('');
+  document.getElementById('reportModal').style.display = 'flex';
+}
+
+function closeReportModal() {
+  document.getElementById('reportModal').style.display = 'none';
+}
