@@ -1,5 +1,5 @@
 // ============================================================================
-// PCNL PUNCTURE SIMULATOR v6.6 — SUPRACOSTAL vs SUBCOSTAL BIOMECHANICS ENGINE
+// PCNL PUNCTURE SIMULATOR v6.7 — TRUE CEPHALOCAUDAL C-ARM PARALLAX ENGINE
 // ============================================================================
 const lihCanvas = document.createElement('canvas');
 const lihCtx = lihCanvas.getContext('2d');
@@ -46,7 +46,8 @@ function getExactCoaxialCArm(pitchDeg, corDeg) {
 
   const aRad = Math.atan2(-dx, dz);
   const z1 = -dx * Math.sin(aRad) + dz * Math.cos(aRad);
-  const bRad = Math.atan2(dy, z1);
+  // True coaxial tilt: when needle points cephalad (dy > 0, hub is caudal), detector tilts caudally (-dy)
+  const bRad = Math.atan2(-dy, z1);
 
   return {
     ax: Math.round(aRad * 180 / Math.PI),
@@ -68,9 +69,6 @@ function getInfundibularUnitVector(cal) {
   return { x: vx / len, y: vy / len, z: vz / len };
 }
 
-// ============================================================================
-// ANATOMICAL CALIBRATION (TRUE SUPRACOSTAL 11-12 ICS vs SUBCOSTAL GEOMETRY)
-// ============================================================================
 (function calibrateAnatomicalCases() {
   const axialProfileByCase = [
     { lower_lat: 30, lower_med: 20, middle: 28, upper: 22 },
@@ -91,14 +89,11 @@ function getInfundibularUnitVector(cal) {
 
       if (k === 'upper') {
         if (idx !== 5) {
-          // True Supracostal Upper-Pole Calyx sits in the 11th-12th ICS (+13mm above 12th rib)
-          // Even on Full Inspiration (-8mm), it remains +5mm above the 12th rib!
           cal.x = pel.x + 22;
           cal.y = c.rib12Y + 13;
-          cal.coronalDeg = -14; // Caudal-medial infundibular axis down into pelvis
+          cal.coronalDeg = -14;
           cal.supracostal = true;
         } else {
-          // Case 6 (Horseshoe Kidney): Malrotated & caudally tethered -> Subcostal Upper Pole!
           cal.supracostal = false;
           cal.coronalDeg = -8;
         }
@@ -108,7 +103,6 @@ function getInfundibularUnitVector(cal) {
         cal.coronalDeg = Math.round(Math.atan2(dy, dx) * 180 / Math.PI * 2) / 2;
       }
     });
-    // Ensure pleura sits realistically in the upper 11th-12th ICS on expiration
     c.pleuraY = c.rib12Y + 23;
   });
 
@@ -164,8 +158,6 @@ function computeOptimalGeometryForTechnique(techMode) {
   }
 
   if (cal.supracostal && techMode !== 'bullseye') {
-    // Keep supracostal skin entry in the lower half of the 11th-12th ICS
-    // (just above the upper border of the 12th rib to avoid the 11th subcostal artery & pleura)
     ccCm = Math.min(0.6, ccCm);
     corDeg = Math.round(Math.atan2(-ccCm, latCm) * 180 / Math.PI * 2) / 2;
   }
@@ -284,8 +276,8 @@ function buildAutoSolutionSteps() {
       target: { cArmAx: 0, cArmOb: isPitchBad && !isCoronalBad ? 30 : 0 },
       narration: `${isCoronalBad ? `<b>Plane 1 Coronal Drift (${state.corDeg.toFixed(1)}° vs ideal ${opt.corDeg.toFixed(1)}°):</b> Off the infundibular axis on 0° AP view, creating a ${computeDiagnostics().dogLegDeg.toFixed(0)}° dog-leg. ` : ''}` +
         `${isPitchBad ? (pitchErr > 0
-          ? `<b>Plane 2 Depth Error (Pitch ${state.pitchDeg.toFixed(1)}° Too Shallow):</b> Passing posteriorly behind the calyx (shifts UPWARD on +30° Ceph tilt).`
-          : `<b>Plane 2 Depth Error (Pitch ${state.pitchDeg.toFixed(1)}° Too Steep):</b> Plunging anteriorly in front of the calyx (shifts DOWNWARD on +30° Ceph tilt).`) : ''}`
+          ? `<b>Plane 2 Depth Error (Pitch ${state.pitchDeg.toFixed(1)}° Too Shallow):</b> Passing superficially/posteriorly behind the calyx (projects DOWNWARD/caudally on +30° Ceph tilt).`
+          : `<b>Plane 2 Depth Error (Pitch ${state.pitchDeg.toFixed(1)}° Too Steep):</b> Plunging deep/anteriorly in front of the calyx (projects UPWARD/cephalad on +30° Ceph tilt).`) : ''}`
     });
 
     if (state.depthMm > 26) {
@@ -320,7 +312,7 @@ function buildAutoSolutionSteps() {
       techLabel: `+30° CEPH PARALLAX`,
       duration: 3.2,
       target: { cArmAx: 0, cArmOb: 30, pitchDeg: shallowPitch, depthMm: apparentDepth },
-      narration: `Tilting C-arm to <b>+30° Cephalad</b> exposes the truth: the superficial needle shifts <b>UPWARD (cephalad)</b> relative to the calyx!`
+      narration: `Tilting C-arm detector to <b>+30° Cephalad</b> (looking caudally from the head) elongates the needle and shows the superficial tip projecting <b>DOWNWARD (caudally)</b> relative to the deeper calyx!`
     });
     steps.push({
       title: `DEMO 1: RETRACT TO 18MM FAT & STEEPEN PITCH`,
@@ -344,7 +336,7 @@ function buildAutoSolutionSteps() {
       techLabel: `+30° CEPH PARALLAX`,
       duration: 3.2,
       target: { cArmAx: 0, cArmOb: 30, pitchDeg: deepPitch, depthMm: apparentDepth },
-      narration: `On <b>+30° Cephalad</b> tilt, a needle deeper/anterior than the calyx shifts <b>DOWNWARD (caudally)</b> below the target cup!`
+      narration: `On <b>+30° Cephalad</b> tilt, a needle tip deeper/anterior than the calyx projects <b>UPWARD (cephalad)</b> above the target cup!`
     });
     steps.push({
       title: `DEMO 2: RETRACT TO 18MM FAT & FLATTEN PITCH`,
@@ -375,7 +367,7 @@ function buildAutoSolutionSteps() {
       techLabel: `${opt.trueAxDeg}° OBLIQUE DRIFT`,
       duration: 3.2,
       target: { respMode: opt.respMode, cArmAx: opt.trueAxDeg, cArmOb: opt.trueObDeg, latCm: opt.latCm, ccCm: opt.ccCm, corDeg: opt.corDeg + 14, pitchDeg: opt.pitchDeg - 9, depthMm: 22 },
-      narration: `At the coaxial C-arm angle (<b>${opt.trueAxDeg}° Axial</b>), hub drift turns the Bull's Eye dot into an elongated line.`
+      narration: `At the coaxial C-arm angle (<b>${opt.trueAxDeg}° Axial, ${opt.trueObDeg}° Tilt</b>), hub drift turns the Bull's Eye dot into an elongated line.`
     });
     steps.push({
       title: `DEMO 4: PIVOT HUB OVER TIP TO RESTORE DOT`,
@@ -393,7 +385,7 @@ function buildAutoSolutionSteps() {
       duration: 2.8,
       target: { respMode: opt.respMode, cArmAx: tech === 'bullseye' ? opt.trueAxDeg : 0, cArmOb: tech === 'bullseye' ? opt.trueObDeg : 0, latCm: opt.latCm, ccCm: opt.ccCm, corDeg: opt.corDeg, pitchDeg: opt.pitchDeg, depthMm: 0 },
       narration: cal.supracostal
-        ? `<b>Why Supracostal + Exp Hold (${cal.label}):</b> This upper calyx sits above the 12th rib in the 11th–12th ICS and drains <b>caudally (${cal.coronalDeg}°)</b>. Puncturing from below the 12th rib on Inspiration would force a 45° upward hairpin turn! Instead, we lock <b>Full Expiration (Exp Hold)</b> so the lung retracts cephalad, and enter in the lower 11th–12th ICS just above the top border of the 12th rib.`
+        ? `<b>Why Supracostal + Exp Hold (${cal.label}):</b> This upper calyx sits above the 12th rib in the 11th–12th ICS and drains <b>caudally (${cal.coronalDeg}°)</b>. Locking <b>Full Expiration (Exp Hold)</b> retracts the lung cephalad so we can enter safely in the lower 11th–12th ICS.`
         : `<b>Subcostal Access (${cal.label}):</b> Locking <b>Full Inspiration (Insp Hold)</b> to displace the kidney caudally below the 12th rib.`
     });
     steps.push({
@@ -402,7 +394,7 @@ function buildAutoSolutionSteps() {
       duration: 2.6,
       target: { cArmAx: tech === 'bullseye' ? opt.trueAxDeg : 0, cArmOb: tech === 'bullseye' ? opt.trueObDeg : 0, latCm: opt.latCm, ccCm: opt.ccCm, corDeg: opt.corDeg, pitchDeg: opt.pitchDeg, depthMm: 3 },
       narration: cal.supracostal
-        ? `<b>Supracostal Point B (11th–12th ICS):</b> Placed at <b>L=${opt.latCm}cm, CC=+${opt.ccCm}cm</b> (immediately above the superior margin of the 12th rib to avoid the 11th subcostal artery), aiming <b>${opt.corDeg}° caudally</b> straight down the infundibular neck.`
+        ? `<b>Supracostal Point B (11th–12th ICS):</b> Placed at <b>L=${opt.latCm}cm, CC=+${opt.ccCm}cm</b> (immediately above the superior margin of the 12th rib), aiming <b>${opt.corDeg}° caudally</b>.`
         : `Point B set at <b>L=${opt.latCm}cm, CC=${opt.ccCm}cm</b> along the <b>${opt.corDeg}°</b> coronal axis. Piercing skin dermis (3 mm).`
     });
     steps.push({
@@ -858,7 +850,8 @@ function project3D(pt, iso) {
   const a = state.cArmAx * Math.PI / 180, b = state.cArmOb * Math.PI / 180;
   const x1 = dx * Math.cos(a) + dz * Math.sin(a);
   const z1 = -dx * Math.sin(a) + dz * Math.cos(a);
-  const y2 = dy * Math.cos(b) - z1 * Math.sin(b);
+  // True Cephalad C-Arm Tilt (+b = detector tilted toward +Y head, looking caudally):
+  const y2 = dy * Math.cos(b) + z1 * Math.sin(b);
   return { u: x1, v: y2 };
 }
 
@@ -904,7 +897,6 @@ function computeDiagnostics() {
   const ribHit = state.depthMm >= tRib && (Math.abs(yAtRib - c.rib12Y) < 3.8 || Math.abs(yAtRib - rib11Y) < 3.8);
   const intercostalHit = state.depthMm >= tRib && ((c.rib12Y - yAtRib > 0 && c.rib12Y - yAtRib < 5.2) || (rib11Y - yAtRib > 0 && rib11Y - yAtRib < 5.5));
 
-  // On Inspiration, lung expands caudally down into the 11th-12th ICS; on Expiration, lung retracts cephalad above the lower 11th-12th ICS
   const pleuraBorderY = c.pleuraY + (state.respMode === 'insp' ? -12 : 4);
   const pleuraHit = state.depthMm >= tRib && yAtRib > pleuraBorderY;
 
@@ -1032,10 +1024,9 @@ function openAutomaticPunctureReview(d, c, cal, opt) {
   const usedSubcostalForSupracostal = cal.supracostal && d.skinY < c.rib12Y;
   const dzErr = d.tipZ - d.calZ;
 
-  // Special analysis if user punctured a Supracostal Upper-Pole calyx via a Subcostal approach on Inspiration!
   if (usedSubcostalForSupracostal) {
     score -= 18;
-    howToImprove.push(`<b>Subcostal-to-Upper-Pole Trade-Off Detected:</b> You punctured this supracostal upper-pole calyx from <b>below the 12th rib</b> (subcostally, Coronal <b>+${state.corDeg.toFixed(1)}° upward</b>). While this completely avoids the pleura, look at your <b>Dog-Leg Angle (${d.dogLegDeg.toFixed(1)}°)</b>: because the upper infundibulum drains <b>caudally (${cal.coronalDeg}° downward)</b> into the pelvis, approaching from below creates a severe hairpin turn! A rigid nephroscope cannot reach the renal pelvis or lower pole from this angle without levering against the 12th rib and tearing the upper infundibular neck.`);
+    howToImprove.push(`<b>Subcostal-to-Upper-Pole Trade-Off Detected:</b> You punctured this supracostal upper-pole calyx from <b>below the 12th rib</b> (subcostally, Coronal <b>+${state.corDeg.toFixed(1)}° upward</b>). While this avoids the pleura, look at your <b>Dog-Leg Angle (${d.dogLegDeg.toFixed(1)}°)</b>: because the upper infundibulum drains <b>caudally (${cal.coronalDeg}° downward)</b> into the pelvis, approaching from below creates a severe hairpin turn! A rigid nephroscope cannot reach the renal pelvis or lower pole from this angle without levering against the 12th rib and tearing the upper infundibular neck.`);
   }
 
   if (!d.inTarget) {
@@ -1047,9 +1038,9 @@ function openAutomaticPunctureReview(d, c, cal, opt) {
     } else {
       if (Math.abs(dzErr) > 4) {
         if (dzErr < 0) {
-          howToImprove.push(`<b>Passed Too Shallow / Posterior (by ${Math.abs(dzErr).toFixed(0)} mm):</b> Your needle pitch (<b>${state.pitchDeg.toFixed(1)}°</b>) was too flat relative to your skin entry, or you stopped short (${Math.round(state.depthMm)} mm vs ideal ${opt.tractDistMm} mm). On a <b>30° Cephalad</b> C-arm tilt, your needle tip shifts <i>upward</i> relative to the calyx—steepen your pitch toward <b>${opt.pitchDeg.toFixed(1)}°</b>.`);
+          howToImprove.push(`<b>Passed Too Shallow / Posterior (by ${Math.abs(dzErr).toFixed(0)} mm):</b> Your needle pitch (<b>${state.pitchDeg.toFixed(1)}°</b>) was too flat relative to your skin entry, or you stopped short (${Math.round(state.depthMm)} mm vs ideal ${opt.tractDistMm} mm). On a <b>+30° Cephalad</b> C-arm tilt, a superficial needle tip projects <i>downward (caudally)</i> relative to the calyx—steepen your pitch toward <b>${opt.pitchDeg.toFixed(1)}°</b>.`);
         } else {
-          howToImprove.push(`<b>Passed Too Deep / Anterior (by ${dzErr.toFixed(0)} mm):</b> Your needle pitch (<b>${state.pitchDeg.toFixed(1)}°</b>) was too vertical/steep compared to ideal (<b>${opt.pitchDeg.toFixed(1)}°</b>), plunging anteriorly past the posterior papilla. On a <b>30° Cephalad</b> tilt, your tip shifts <i>downward</i> below the calyx.`);
+          howToImprove.push(`<b>Passed Too Deep / Anterior (by ${dzErr.toFixed(0)} mm):</b> Your needle pitch (<b>${state.pitchDeg.toFixed(1)}°</b>) was too vertical/steep compared to ideal (<b>${opt.pitchDeg.toFixed(1)}°</b>), plunging anteriorly past the posterior papilla. On a <b>+30° Cephalad</b> tilt, a deep needle tip projects <i>upward (cephalad)</i> relative to the calyx.`);
         }
       }
       if (d.coronalMismatch > 7 && !usedSubcostalForSupracostal) {
