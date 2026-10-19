@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PCNL Surgical Access, Auto-Solution & Haptic Simulator v4.0</title>
+  <title>PCNL Surgical Access, Auto-Solution & Haptic Simulator v6.0</title>
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -11,9 +11,14 @@
 <header>
   <div class="brand">
     <span>PCNL SURGICAL SIMULATOR</span>
-    <span class="v-badge">v4.0 MODULAR</span>
+    <span class="v-badge" style="background:#0284c7;border-color:#38bdf8;color:#fff;">v6.0 PHONE-3D</span>
   </div>
   <div class="top-bar">
+    <!-- HARDCODED PHONE PAIRING BUTTON (ALWAYS VISIBLE) -->
+    <button id="pairPhoneBtn" onclick="openPairPhoneModal()" style="background:#0284c7;border-color:#38bdf8;color:#fff;font-weight:800;">
+      📱 Pair Phone Needle
+    </button>
+
     <select id="caseSelect" title="Clinical Case">
       <option value="0">Case 1: Standard Pelvic + Lower-Pole Stone (Hydronephrotic)</option>
       <option value="1">Case 2: Branched Staghorn (Steep 52° Lower Neck — Dog-Leg Trap)</option>
@@ -65,7 +70,6 @@
       <div class="canvas-box">
         <canvas id="fluoroCanvas"></canvas>
 
-        <!-- Step-by-Step Auto-Solution Narration Overlay -->
         <div class="narration-banner" id="narrationBanner">
           <div class="narration-title">
             <span id="narrationStepTitle">AUTO-SOLUTION STEP 1/8</span>
@@ -80,12 +84,10 @@
           <button onclick="setCArm(0,0)">0° AP</button>
           <button onclick="setCArm(30,0)">30° Bull's Eye</button>
           <button onclick="setCArm(0,30)">30° Ceph</button>
-          <button id="clampBtn" class="active" onclick="toggleClamp()" title="Hold needle with radiolucent clamp to prevent superficial gravity sag">
+          <button id="clampBtn" class="active" onclick="toggleClamp()">
             Radiolucent Clamp: ON
           </button>
-          <button onclick="injectNeedleContrast()" title="Inject contrast through 18G needle">
-            Inject Contrast
-          </button>
+          <button onclick="injectNeedleContrast()">Inject Contrast</button>
           <button onclick="clearBlush()" id="clearBlushBtn" style="display:none;border-color:#f59e0b;color:#fbbf24;">
             Washout Blush
           </button>
@@ -139,7 +141,6 @@
       <ul class="coach-list" id="coachList"></ul>
     </div>
 
-    <!-- Haptic Tissue Resistance & Pop Feel Meter -->
     <div class="haptic-bar-wrap">
       <div style="display:flex;justify-content:space-between;font-size:10.5px;">
         <span id="hapticLayerText" style="font-weight:700;color:#7dd3fc;">HAPTIC FEEL: Resting on Skin (Point B)</span>
@@ -200,9 +201,9 @@
         <div class="sl-head"><span>Needle Advancement Along Tract [↑/↓ or Scroll]</span><span class="sl-val" id="vDepth">0 mm (Skin)</span></div>
         <input type="range" id="sDepth" min="0" max="135" step="1" value="0">
         <div class="grid-4" style="margin-top:2px;">
-          <button onclick="setExactDepth(0)" title="Place tip on skin at Point B">0mm Skin</button>
-          <button onclick="setExactDepth(3)" title="Puncture skin dermis">3mm Dermis</button>
-          <button onclick="jumpToFascia()" title="Advance to Lumbodorsal Fascia (1st Pop)">1st Pop (Fascia)</button>
+          <button onclick="setExactDepth(0)">0mm Skin</button>
+          <button onclick="setExactDepth(3)">3mm Dermis</button>
+          <button onclick="jumpToFascia()">1st Pop (Fascia)</button>
           <button onclick="stepDepth(5)">+5mm Push</button>
         </div>
       </div>
@@ -235,10 +236,7 @@
           <button onclick="autoSteerTerumo()">Auto-Torque Tip</button>
         </div>
       </div>
-
-      <div class="sec-label" style="margin-top:5px;">
-        <span>Catheter Backup & Stiff Wire Exchange</span>
-      </div>
+      <div class="sec-label" style="margin-top:5px;"><span>Catheter Backup & Stiff Wire Exchange</span></div>
       <div class="grid-2">
         <button id="btnKumpe" onclick="toggleKumpe()">1. Advance 5Fr Kumpe</button>
         <button id="btnStiff" onclick="exchangeStiffWire()">2. Swap Super Stiff Wire</button>
@@ -255,10 +253,7 @@
         <span id="needlePitchRef" style="color:#7dd3fc;font-family:monospace;">Needle Pitch: 30.5°</span>
       </div>
       <div class="sl-row">
-        <div class="sl-head">
-          <span>Dilator Entry Pitch Angle (Match Needle!)</span>
-          <span class="sl-val" id="vDilPitch">30.5°</span>
-        </div>
+        <div class="sl-head"><span>Dilator Entry Pitch Angle (Match Needle!)</span><span class="sl-val" id="vDilPitch">30.5°</span></div>
         <input type="range" id="sDilPitch" min="10" max="60" step="0.5" value="30.5">
       </div>
       <div class="sl-row">
@@ -269,13 +264,8 @@
         <div class="sl-head"><span>24 Fr Amplatz Renal Sheath Depth</span><span class="sl-val" id="vSheath">0 mm</span></div>
         <input type="range" id="sSheath" min="0" max="125" step="1" value="0">
       </div>
-      <button onclick="matchDilatorAngle()" style="font-size:10.5px;">
-        Align Dilator Coaxial with Guidewire Vector
-      </button>
-
-      <div class="sec-label" style="margin-top:5px;">
-        <span>24 Fr Rigid Nephroscope Sweep</span>
-      </div>
+      <button onclick="matchDilatorAngle()" style="font-size:10.5px;">Align Dilator Coaxial with Guidewire Vector</button>
+      <div class="sec-label" style="margin-top:5px;"><span>24 Fr Rigid Nephroscope Sweep</span></div>
       <div class="sl-row">
         <div class="sl-head"><span>Nephroscope Leverage / Sweep Angle</span><span class="sl-val" id="vScopeSweep">0° (Neutral)</span></div>
         <input type="range" id="sScopeSweep" min="-35" max="35" step="1" value="0">
@@ -285,28 +275,41 @@
       </div>
     </div>
 
-    <!-- Live Diagnostic Telemetry -->
     <div class="telemetry-card">
       <div class="badge-pill b-info" id="statusBadge">READY ON SKIN (0 MM)</div>
-      <div id="statusText">Needle tip is resting on the flank skin at Point B (0 mm). Click <b>▶ Auto-Solve</b> to watch a slow step-by-step walkthrough, or advance manually.</div>
+      <div id="statusText">Needle tip is resting on the flank skin at Point B (0 mm). Click <b>📱 Pair Phone Needle</b> or <b>▶ Auto-Solve</b>.</div>
     </div>
   </div>
 </div>
 
+<!-- HARDCODED PHONE PAIRING MODAL -->
+<div id="phonePairModal" style="position:fixed;inset:0;background:rgba(4,8,15,0.86);z-index:9999;display:none;align-items:center;justify-content:center;backdrop-filter:blur(4px);">
+  <div style="background:#0e1726;border:1px solid #38bdf8;border-radius:8px;padding:18px;max-width:430px;width:92%;text-align:center;box-shadow:0 12px 32px rgba(0,0,0,0.8);">
+    <h3 style="color:#38bdf8;font-size:15px;margin-bottom:6px;">📱 2-DEVICE OR MODE: PHONE AS 18G NEEDLE</h3>
+    <p style="color:#cbd5e1;font-size:11.5px;line-height:1.4;margin-bottom:12px;">
+      Scan this QR code with your phone camera (or open the link below on your phone) to hold your phone like the Chiba needle!
+    </p>
+    <div style="background:#fff;padding:10px;border-radius:6px;display:inline-block;margin-bottom:10px;">
+      <img id="phoneQrImg" src="" alt="Scan QR Code" style="width:180px;height:180px;display:block;">
+    </div>
+    <div id="phoneRoomCodeDisplay" style="font-family:monospace;font-size:18px;font-weight:800;color:#fde047;margin-bottom:6px;">
+      ROOM CODE: ----
+    </div>
+    <div id="phoneUrlDisplay" style="font-size:11px;color:#38bdf8;word-break:break-all;margin-bottom:12px;user-select:all;"></div>
+    <div id="pcPairStatus" style="font-size:11.5px;color:#fbbf24;font-weight:700;margin-bottom:12px;">
+      Connecting surgical P2P bridge...
+    </div>
+    <button onclick="document.getElementById('phonePairModal').style.display='none'" style="background:#0284c7;color:#fff;border:1px solid #38bdf8;padding:7px 16px;border-radius:4px;font-weight:700;cursor:pointer;">
+      Close Window
+    </button>
+  </div>
+</div>
+
 <script>
-  // Auto-bust browser cache on every refresh so GitHub Pages updates appear immediately
-  const v = Date.now();
-  document.querySelector('link[rel="stylesheet"]').href = 'styles.css?v=' + v;
-  ['cases.js', 'physics.js', 'renderer.js'].forEach(src => {
-    const s = document.createElement('script');
-    s.src = src + '?v=' + v;
-    s.async = false; // preserve exact load order: cases -> physics -> renderer
-    document.body.appendChild(s);
-  });
-</script>
-</body>
-</html>
-<script>
+  function openPairPhoneModal() {
+    const m = document.getElementById('phonePairModal');
+    if (m) m.style.display = 'flex';
+  }
   const v = Date.now();
   document.querySelector('link[rel="stylesheet"]').href = 'styles.css?v=' + v;
   ['cases.js', 'physics.js', 'renderer.js', 'controller.js'].forEach(src => {
@@ -316,3 +319,5 @@
     document.body.appendChild(s);
   });
 </script>
+</body>
+</html>
