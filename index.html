@@ -286,7 +286,7 @@
   }
   const v = Date.now();
   document.querySelector('link[rel="stylesheet"]').href = 'styles.css?v=' + v;
-  ['cases.js', 'physics.js', 'renderer.js', 'controller.js'].forEach(src => {
+  ['cases.js', 'physics.js', 'solver.js', 'review.js', 'renderer.js', 'controller.js'].forEach(src => {
     const s = document.createElement('script');
     s.src = src + '?v=' + v;
     s.async = false;
