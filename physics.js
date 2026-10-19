@@ -1,5 +1,5 @@
 // ============================================================================
-// PCNL PUNCTURE SIMULATOR v6.5 — PURE PUNCTURE PHYSICS & AUTO-REVIEW ENGINE
+// PCNL PUNCTURE SIMULATOR v6.6 — SUPRACOSTAL vs SUBCOSTAL BIOMECHANICS ENGINE
 // ============================================================================
 const lihCanvas = document.createElement('canvas');
 const lihCtx = lihCanvas.getContext('2d');
@@ -26,15 +26,15 @@ function getTargetCalyxBase() {
 
 function getRespShift() {
   if (state.respMode === 'insp') return -8;
-  if (state.respMode === 'exp') return +8;
-  return Math.sin(state.tidalPhase) * 8;
+  if (state.respMode === 'exp') return +6;
+  return Math.sin(state.tidalPhase) * 7;
 }
 
 function getPlannedRespShift() {
   const cal = getTargetCalyxBase();
   if (state.respMode === 'insp') return -8;
-  if (state.respMode === 'exp') return +8;
-  return cal.supracostal ? +8 : -8;
+  if (state.respMode === 'exp') return +6;
+  return cal.supracostal ? +6 : -8;
 }
 
 function getExactCoaxialCArm(pitchDeg, corDeg) {
@@ -68,31 +68,48 @@ function getInfundibularUnitVector(cal) {
   return { x: vx / len, y: vy / len, z: vz / len };
 }
 
+// ============================================================================
+// ANATOMICAL CALIBRATION (TRUE SUPRACOSTAL 11-12 ICS vs SUBCOSTAL GEOMETRY)
+// ============================================================================
 (function calibrateAnatomicalCases() {
   const axialProfileByCase = [
-    { lower_lat: 30, lower_med: 20, middle: 28, upper: 16 },
-    { lower_lat: 38, lower_med: 22, middle: 32, upper: 18 },
-    { lower_lat: 26, lower_med: 18, middle: 28, upper: 15 },
-    { lower_lat: 28, lower_med: 20, middle: 26, upper: 16 },
-    { lower_lat: 40, lower_med: 24, middle: 34, upper: 18 },
-    { lower_lat: 16, lower_med: 12, middle: 14, upper: 12 }
+    { lower_lat: 30, lower_med: 20, middle: 28, upper: 22 },
+    { lower_lat: 38, lower_med: 22, middle: 32, upper: 24 },
+    { lower_lat: 26, lower_med: 18, middle: 28, upper: 22 },
+    { lower_lat: 28, lower_med: 20, middle: 26, upper: 24 },
+    { lower_lat: 40, lower_med: 24, middle: 34, upper: 24 },
+    { lower_lat: 16, lower_med: 12, middle: 14, upper: 18 }
   ];
 
   CASES.forEach((c, idx) => {
-    if (c.calyces.upper && idx !== 5) {
-      c.calyces.upper.x = c.pelvis.x + 25;
-      c.calyces.upper.y = c.rib12Y + 6;
-      c.calyces.upper.supracostal = true;
-    }
     const pel = c.pelvis;
     const axMap = axialProfileByCase[idx] || axialProfileByCase[0];
+
     Object.keys(c.calyces).forEach(k => {
       const cal = c.calyces[k];
       if (axMap[k] !== undefined) cal.axialDeg = axMap[k];
-      const dx = cal.x - pel.x;
-      const dy = pel.y - cal.y;
-      cal.coronalDeg = Math.round(Math.atan2(dy, dx) * 180 / Math.PI * 2) / 2;
+
+      if (k === 'upper') {
+        if (idx !== 5) {
+          // True Supracostal Upper-Pole Calyx sits in the 11th-12th ICS (+13mm above 12th rib)
+          // Even on Full Inspiration (-8mm), it remains +5mm above the 12th rib!
+          cal.x = pel.x + 22;
+          cal.y = c.rib12Y + 13;
+          cal.coronalDeg = -14; // Caudal-medial infundibular axis down into pelvis
+          cal.supracostal = true;
+        } else {
+          // Case 6 (Horseshoe Kidney): Malrotated & caudally tethered -> Subcostal Upper Pole!
+          cal.supracostal = false;
+          cal.coronalDeg = -8;
+        }
+      } else {
+        const dx = cal.x - pel.x;
+        const dy = pel.y - cal.y;
+        cal.coronalDeg = Math.round(Math.atan2(dy, dx) * 180 / Math.PI * 2) / 2;
+      }
     });
+    // Ensure pleura sits realistically in the upper 11th-12th ICS on expiration
+    c.pleuraY = c.rib12Y + 23;
   });
 
   const pedalBtn = document.getElementById('pedalBtn');
@@ -144,6 +161,13 @@ function computeOptimalGeometryForTechnique(techMode) {
     ccCm = Math.round((-latCm * Math.tan(radCor)) * 10) / 10;
     ccCm = Math.max(-5.5, Math.min(4.2, ccCm));
     corDeg = trueCorDeg;
+  }
+
+  if (cal.supracostal && techMode !== 'bullseye') {
+    // Keep supracostal skin entry in the lower half of the 11th-12th ICS
+    // (just above the upper border of the 12th rib to avoid the 11th subcostal artery & pleura)
+    ccCm = Math.min(0.6, ccCm);
+    corDeg = Math.round(Math.atan2(-ccCm, latCm) * 180 / Math.PI * 2) / 2;
   }
 
   if (cal.forceSubcostal) {
@@ -366,25 +390,27 @@ function buildAutoSolutionSteps() {
     steps.push({
       title: `RESPIRATORY LOCK & C-ARM SETUP`,
       techLabel: techTitle,
-      duration: 2.5,
+      duration: 2.8,
       target: { respMode: opt.respMode, cArmAx: tech === 'bullseye' ? opt.trueAxDeg : 0, cArmOb: tech === 'bullseye' ? opt.trueObDeg : 0, latCm: opt.latCm, ccCm: opt.ccCm, corDeg: opt.corDeg, pitchDeg: opt.pitchDeg, depthMm: 0 },
       narration: cal.supracostal
-        ? `<b>Supracostal (${cal.label}):</b> Locking <b>Exp Hold</b> so the pleura retracts cephalad.`
-        : `<b>Subcostal (${cal.label}):</b> Locking <b>Insp Hold</b> to push the kidney below the 12th rib.`
+        ? `<b>Why Supracostal + Exp Hold (${cal.label}):</b> This upper calyx sits above the 12th rib in the 11th–12th ICS and drains <b>caudally (${cal.coronalDeg}°)</b>. Puncturing from below the 12th rib on Inspiration would force a 45° upward hairpin turn! Instead, we lock <b>Full Expiration (Exp Hold)</b> so the lung retracts cephalad, and enter in the lower 11th–12th ICS just above the top border of the 12th rib.`
+        : `<b>Subcostal Access (${cal.label}):</b> Locking <b>Full Inspiration (Insp Hold)</b> to displace the kidney caudally below the 12th rib.`
     });
     steps.push({
       title: `POINT B & SKIN DERMIS PUNCTURE (3 MM)`,
       techLabel: techTitle,
       duration: 2.6,
       target: { cArmAx: tech === 'bullseye' ? opt.trueAxDeg : 0, cArmOb: tech === 'bullseye' ? opt.trueObDeg : 0, latCm: opt.latCm, ccCm: opt.ccCm, corDeg: opt.corDeg, pitchDeg: opt.pitchDeg, depthMm: 3 },
-      narration: `Point B set at <b>L=${opt.latCm}cm, CC=${opt.ccCm}cm</b> along the <b>${opt.corDeg}°</b> coronal axis. Piercing skin dermis (3 mm).`
+      narration: cal.supracostal
+        ? `<b>Supracostal Point B (11th–12th ICS):</b> Placed at <b>L=${opt.latCm}cm, CC=+${opt.ccCm}cm</b> (immediately above the superior margin of the 12th rib to avoid the 11th subcostal artery), aiming <b>${opt.corDeg}° caudally</b> straight down the infundibular neck.`
+        : `Point B set at <b>L=${opt.latCm}cm, CC=${opt.ccCm}cm</b> along the <b>${opt.corDeg}°</b> coronal axis. Piercing skin dermis (3 mm).`
     });
     steps.push({
-      title: `LUMBODORSAL FASCIA PUNCTURE [1ST POP]`,
+      title: `INTERCOSTAL / LUMBODORSAL FASCIA [1ST POP]`,
       techLabel: techTitle,
       duration: 3.0,
       target: { cArmAx: tech === 'triangulation' ? 0 : opt.trueAxDeg, cArmOb: tech === 'triangulation' ? 0 : opt.trueObDeg, latCm: opt.latCm, ccCm: opt.ccCm, corDeg: opt.corDeg, pitchDeg: opt.pitchDeg, depthMm: opt.fasciaDepthMm + 4 },
-      narration: `Punching through the <b>Lumbodorsal Fascia at ${opt.fasciaDepthMm} mm [1st Tactile Pop: 6.8 N]</b>.`
+      narration: `Punching through the <b>Fascia at ${opt.fasciaDepthMm} mm [1st Tactile Pop: 6.8 N]</b> while keeping coaxial alignment.`
     });
     steps.push({
       title: `BIPLANAR DEPTH & PARALLAX CHECK`,
@@ -874,9 +900,12 @@ function computeDiagnostics() {
 
   const tRib = 18 / Math.max(0.15, ng.dir.z);
   const yAtRib = ng.skinEntry.y + ng.dir.y * tRib;
-  const ribHit = state.depthMm >= tRib && Math.abs(yAtRib - c.rib12Y) < 4.2;
-  const intercostalHit = state.depthMm >= tRib && (c.rib12Y - yAtRib > 0 && c.rib12Y - yAtRib < 6.0);
-  const pleuraBorderY = c.pleuraY + (state.respMode === 'insp' ? -10 : 5);
+  const rib11Y = c.rib12Y + 28;
+  const ribHit = state.depthMm >= tRib && (Math.abs(yAtRib - c.rib12Y) < 3.8 || Math.abs(yAtRib - rib11Y) < 3.8);
+  const intercostalHit = state.depthMm >= tRib && ((c.rib12Y - yAtRib > 0 && c.rib12Y - yAtRib < 5.2) || (rib11Y - yAtRib > 0 && rib11Y - yAtRib < 5.5));
+
+  // On Inspiration, lung expands caudally down into the 11th-12th ICS; on Expiration, lung retracts cephalad above the lower 11th-12th ICS
+  const pleuraBorderY = c.pleuraY + (state.respMode === 'insp' ? -12 : 4);
   const pleuraHit = state.depthMm >= tRib && yAtRib > pleuraBorderY;
 
   let layer = "0mm: On Skin Surface (Point B)", resistanceN = 0.0, popZone = 'none', dimpleFactor = 0.0;
@@ -912,7 +941,7 @@ function computeDiagnostics() {
     colonRisk, paraspinalRisk, ribHit, intercostalHit, pleuraHit,
     layer, resistanceN, dimpleFactor, inTarget, inInfundibulumWall, inAnt,
     coaxialErr, isSagging: ng.isSagging, isPendulumSwinging: ng.isPendulumSwinging,
-    tipZ: ng.tip.z, calZ: cal.z
+    tipZ: ng.tip.z, calZ: cal.z, skinY: ng.skinEntry.y, yAtRib
   };
 }
 
@@ -924,8 +953,14 @@ function updateDiagnosticsAndCoach() {
   document.getElementById('hapticForceVal').textContent = `${d.resistanceN.toFixed(1)} N`;
   document.getElementById('hapticFill').style.width = `${Math.min(100, (d.resistanceN / 7.5) * 100)}%`;
 
-  const steps = [
-    { done: state.respMode !== 'tidal', text: `1. Lock Respiration (${cal.supracostal ? 'Exp Hold for Supracostal' : 'Insp Hold'}).` },
+  const steps = cal.supracostal ? [
+    { done: state.respMode === 'exp', text: "1. Supracostal Rule: Lock Exp Hold (lung retracts above 11-12 ICS)." },
+    { done: state.visited0AP && d.coronalMismatch <= 10, text: "2. 0° AP: Place Point B in lower 11-12 ICS & aim caudally (-14°)." },
+    { done: state.depthMm >= 28 && !d.ribHit && !d.pleuraHit, text: "3. Skate over top edge of 12th rib through Fascia [1st Pop]." },
+    { done: (state.visited30Ax || state.visited30Ob), text: "4. 30° Oblique / Ceph View: Verify coaxial depth & pitch." },
+    { done: d.inTarget && state.styletPulled, text: "5. Enter Upper Papilla [2nd Pop] & Pull Stylet for Review." }
+  ] : [
+    { done: state.respMode === 'insp', text: "1. Subcostal Rule: Lock Insp Hold (pushes kidney below 12th rib)." },
     { done: state.visited0AP && d.coronalMismatch <= 8, text: "2. 0° AP View: Align Point B & Coronal Aim with infundibulum." },
     { done: state.depthMm >= 28, text: "3. Advance through Skin (3mm) & Lumbodorsal Fascia [1st Pop]." },
     { done: (state.visited30Ax || state.visited30Ob), text: "4. 30° Oblique / Ceph View: Verify coaxial depth & pitch." },
@@ -944,11 +979,14 @@ function updateDiagnosticsAndCoach() {
     const badge = document.getElementById('statusBadge');
     const txt = document.getElementById('statusText');
     if (d.ribHit) {
-      badge.className = 'badge-pill b-err'; badge.textContent = '12TH RIB PERIOSTEAL STRIKE';
-      txt.innerHTML = 'Needle struck the 12th rib! Move Point B caudally and angle cephalad.';
+      badge.className = 'badge-pill b-err'; badge.textContent = 'RIB PERIOSTEAL STRIKE';
+      txt.innerHTML = 'Needle struck the rib! For supracostal access, hug the superior border of the 12th rib; for subcostal, move caudally.';
+    } else if (d.intercostalHit) {
+      badge.className = 'badge-pill b-err'; badge.textContent = 'SUBCOSTAL ARTERY / NERVE LACERATION RISK!';
+      txt.innerHTML = 'You passed immediately beneath the inferior border of the rib where the intercostal neurovascular bundle runs! Always hug the <b>superior</b> border of the lower rib.';
     } else if (d.pleuraHit) {
       badge.className = 'badge-pill b-err'; badge.textContent = 'PLEURAL TRANGRESSION (HYDROTHORAX RISK)';
-      txt.innerHTML = 'Supracostal needle crossed the pleura during inspiration. Switch to <b>Resp: Exp Hold</b>!';
+      txt.innerHTML = 'Supracostal needle crossed the pleura! Switch to <b>Resp: Exp Hold</b> and stay in the lower half of the 11th–12th ICS.';
     } else {
       badge.className = d.inTarget ? 'badge-pill b-ok' : 'badge-pill b-info';
       badge.textContent = `DOG-LEG: ${d.dogLegDeg.toFixed(1)}° | DEPTH: ${Math.round(state.depthMm)} MM | FORCE: ${d.resistanceN.toFixed(1)} N`;
@@ -991,7 +1029,15 @@ function openAutomaticPunctureReview(d, c, cal, opt) {
   const howToImprove = [];
   const patientNotes = [];
 
+  const usedSubcostalForSupracostal = cal.supracostal && d.skinY < c.rib12Y;
   const dzErr = d.tipZ - d.calZ;
+
+  // Special analysis if user punctured a Supracostal Upper-Pole calyx via a Subcostal approach on Inspiration!
+  if (usedSubcostalForSupracostal) {
+    score -= 18;
+    howToImprove.push(`<b>Subcostal-to-Upper-Pole Trade-Off Detected:</b> You punctured this supracostal upper-pole calyx from <b>below the 12th rib</b> (subcostally, Coronal <b>+${state.corDeg.toFixed(1)}° upward</b>). While this completely avoids the pleura, look at your <b>Dog-Leg Angle (${d.dogLegDeg.toFixed(1)}°)</b>: because the upper infundibulum drains <b>caudally (${cal.coronalDeg}° downward)</b> into the pelvis, approaching from below creates a severe hairpin turn! A rigid nephroscope cannot reach the renal pelvis or lower pole from this angle without levering against the 12th rib and tearing the upper infundibular neck.`);
+  }
+
   if (!d.inTarget) {
     score -= 40;
     if (d.inInfundibulumWall) {
@@ -1006,7 +1052,7 @@ function openAutomaticPunctureReview(d, c, cal, opt) {
           howToImprove.push(`<b>Passed Too Deep / Anterior (by ${dzErr.toFixed(0)} mm):</b> Your needle pitch (<b>${state.pitchDeg.toFixed(1)}°</b>) was too vertical/steep compared to ideal (<b>${opt.pitchDeg.toFixed(1)}°</b>), plunging anteriorly past the posterior papilla. On a <b>30° Cephalad</b> tilt, your tip shifts <i>downward</i> below the calyx.`);
         }
       }
-      if (d.coronalMismatch > 7) {
+      if (d.coronalMismatch > 7 && !usedSubcostalForSupracostal) {
         howToImprove.push(`<b>Plane 1 Coronal Drift (${state.corDeg.toFixed(1)}° vs ideal ${opt.corDeg.toFixed(1)}°):</b> On the <b>0° AP view</b>, your needle trajectory was not aligned with the target calyx's infundibular axis.`);
       }
     }
@@ -1016,17 +1062,17 @@ function openAutomaticPunctureReview(d, c, cal, opt) {
 
   if (d.dogLegDeg <= 15) {
     howToImprove.push(`<b>Excellent Coaxial Alignment (Dog-Leg ${d.dogLegDeg.toFixed(1)}°):</b> Because your needle vector aligns within 15° of the infundibulum (Axial ${cal.axialDeg}°, Coronal ${cal.coronalDeg}°), a guidewire will glide straight into the renal pelvis and a 24Fr sheath will exert minimal parenchymal torque.`);
-  } else if (d.dogLegDeg <= 28) {
+  } else if (d.dogLegDeg <= 28 && !usedSubcostalForSupracostal) {
     score -= 12;
     howToImprove.push(`<b>Moderate Dog-Leg Angle (${d.dogLegDeg.toFixed(1)}°):</b> Your coronal aim (${state.corDeg.toFixed(1)}°) or skin offset deviated from the ${cal.coronalDeg}° infundibular axis. To reduce torque, place Point B at <b>L=${opt.latCm}cm, CC=${opt.ccCm}cm</b> and aim at <b>${opt.corDeg}°</b>.`);
-  } else {
+  } else if (!usedSubcostalForSupracostal) {
     score -= 25;
-    howToImprove.push(`<b>Severe "Roof-Entry" Dog-Leg (${d.dogLegDeg.toFixed(1)}°):</b> Entering at a ${d.dogLegDeg.toFixed(0)}° angle to the infundibular neck causes guidewires to bounce off the opposite wall and risks tearing the infundibular neck during tract dilation! Move Point B caudally/laterally to <b>L=${opt.latCm}cm, CC=${opt.ccCm}cm</b>.`);
+    howToImprove.push(`<b>Severe "Roof-Entry" Dog-Leg (${d.dogLegDeg.toFixed(1)}°):</b> Entering at a ${d.dogLegDeg.toFixed(0)}° angle to the infundibular neck causes guidewires to bounce off the opposite wall and risks tearing the infundibular neck during tract dilation! Move Point B to <b>L=${opt.latCm}cm, CC=${opt.ccCm}cm</b>.`);
   }
 
-  if (cal.supracostal && state.respMode !== 'exp') {
+  if (cal.supracostal && !usedSubcostalForSupracostal && state.respMode !== 'exp') {
     score -= 20;
-    howToImprove.push(`<b>Supracostal Respiratory Error:</b> You punctured a supracostal calyx during <b>${state.respMode.toUpperCase()}</b>! Supracostal access must be performed in <b>Full Expiration (Exp Hold)</b> to keep the parietal pleura cephalad.`);
+    howToImprove.push(`<b>Supracostal Respiratory Error:</b> You punctured through the 11th–12th intercostal space during <b>${state.respMode.toUpperCase()}</b>! During inspiration, the lung expands downward into the costophrenic sulcus. Always use <b>Full Expiration (Exp Hold)</b> for intercostal access.`);
   } else if (!cal.supracostal && state.respMode === 'tidal') {
     score -= 8;
     howToImprove.push(`<b>Unlocked Tidal Respiration:</b> Puncturing during tidal breathing causes a "windshield-wiper" pendulum swing of the kidney. Lock <b>Insp Hold</b> before crossing the renal capsule.`);
@@ -1037,31 +1083,29 @@ function openAutomaticPunctureReview(d, c, cal, opt) {
   }
   if (d.ribHit || d.intercostalHit) {
     score -= 25;
-    howToImprove.push(`<b>Costal / Subcostal Neurovascular Hazard:</b> Your tract struck the 12th rib or the subcostal neurovascular bundle running along its inferior margin. Shift Point B caudally (CC = ${opt.ccCm} cm) and triangulate cephalad.`);
+    howToImprove.push(`<b>Costal / Subcostal Neurovascular Hazard:</b> Your tract struck the rib or passed along the inferior subcostal groove where the intercostal artery and nerve run. In supracostal access, always hug the <b>superior border of the 12th rib</b>!`);
   }
-  if (d.colonRisk) {
-    score -= 25;
-    howToImprove.push(`<b>Retroperitoneal Colon Hazard:</b> Your skin entry (L=${state.latCm.toFixed(1)} cm) is too far lateral (beyond the Posterior Axillary Line). Keep L near <b>${opt.latCm} cm</b>.`);
+  if (d.pleuraHit) {
+    score -= 30;
+    howToImprove.push(`<b>Pleural Transgression (Hydrothorax / Hemothorax Risk):</b> Your needle crossed the parietal/visceral pleura in the upper intercostal space! Lock <b>Exp Hold</b> and enter in the lower half of the 11th–12th ICS.`);
   }
 
-  if (state.targetKey !== c.defaultCalyx) {
+  if (cal.supracostal) {
+    patientNotes.push(`<b>Why Supracostal (11th–12th ICS) Beats Subcostal for Upper-Pole Access:</b> The upper-pole infundibulum points <b>cephalad-lateral</b> (draining caudally at <b>${cal.coronalDeg}°</b> into the pelvis). Entering above the 12th rib in <b>Full Expiration</b> lets you aim caudally straight down the long axis of the kidney (<b>${opt.dogLegDeg.toFixed(1)}° dog-leg, ${cal.reachPct}% reach</b> into pelvis, lower pole &amp; ureter). Trying to puncture it subcostally from below the 12th rib forces an upward angle (+25° to +35°), creating a ~45° hairpin kink against the 12th rib fulcrum.`);
+  } else if (state.targetKey !== c.defaultCalyx) {
     const bestCal = c.calyces[c.defaultCalyx];
     patientNotes.push(`<b>Calyx Selection Note (${cal.label} vs. ${bestCal.label}):</b> You targeted <b>${cal.label}</b> (Stone Reach: <b>${cal.reachPct}%</b>, Neck Width: <b>${cal.neckW} mm</b>). For <b>${c.name}</b>, the preferred primary target is <b>${bestCal.label}</b> (Reach: <b>${bestCal.reachPct}%</b>, Neck: <b>${bestCal.neckW} mm</b>).`);
   } else {
     patientNotes.push(`<b>Optimal Calyx Choice (${cal.label}):</b> You selected the primary target calyx for this patient (Stone Clearance Reach: <b>${cal.reachPct}%</b>, Infundibular Width: <b>${cal.neckW} mm</b>, True Axial Angle: <b>${cal.axialDeg}°</b>).`);
   }
 
-  if (state.targetKey === 'lower_med') {
-    patientNotes.push(`<b>Why Sub-Apical Medial Calyces Are Tricky:</b> This calyx has a narrow neck (<b>${cal.neckW} mm</b>), steep coronal angle (<b>${cal.coronalDeg}°</b>), and more medial position (${cal.x} mm), giving only <b>${cal.reachPct}%</b> rigid scope reach and higher paraspinal muscle resistance.`);
-  }
-
   const casePearls = [
-    `<b>Case 1 Pearl (Standard Brödel Kidney):</b> The lower-lateral posterior calyx sits at a classic <b>30° axial</b> and <b>22° coronal</b> angle. Using the Hybrid technique (0° AP line + 30° ipsilateral Bull's Eye) gives a straight 78 mm coaxial tract.`,
-    `<b>Case 2 Pearl (52° Steep Staghorn Neck):</b> A pure 30° Bull's Eye at 0° coronal creates a <b>52° dog-leg</b> against the impacted staghorn! Either drop Point B caudally (<b>CC = ${opt.ccCm} cm</b>, aiming <b>+${opt.corDeg}° cephalad</b>) OR puncture the <b>Upper-Pole Compound calyx</b> (96% reach) straight down the renal axis.`,
-    `<b>Case 3 Pearl (Calyx Directly Under 12th Rib):</b> Because the target papilla lies directly beneath the 12th rib (Y=18mm), a straight Bull's Eye strikes bone. You must use <b>Subcostal Cephalad Triangulation</b>: enter at <b>CC = -2.0 cm</b> below the rib in <b>Insp Hold</b> and angle <b>+26° cephalad</b>.`,
-    `<b>Case 4 Pearl (Supracostal 11th–12th ICS Staghorn):</b> Puncturing the upper-pole compound calyx above the 12th rib in <b>Full Expiration</b> avoids the pleura and provides a straight caudal vector (<b>-12° coronal</b>) with <b>98% reach</b> down to the lower pole and ureter.`,
+    `<b>Case 1 Pearl (Standard Brödel Kidney):</b> The lower-lateral posterior calyx sits at a classic <b>30° axial</b> and <b>22° coronal</b> angle. Using the Hybrid technique (0° AP line + 30° ipsilateral Bull's Eye) gives a straight 78 mm subcostal tract.`,
+    `<b>Case 2 Pearl (52° Steep Staghorn Neck):</b> A pure 30° Bull's Eye at 0° coronal creates a <b>52° dog-leg</b> against the impacted staghorn! Either drop Point B caudally (<b>CC = ${opt.ccCm} cm</b>, aiming <b>+${opt.corDeg}° cephalad</b>) OR puncture the <b>Supracostal Upper-Pole Compound calyx</b> (96% reach) straight down the renal axis.`,
+    `<b>Case 3 Pearl (Calyx Directly Under 12th Rib):</b> Because the target papilla lies directly beneath the 12th rib (Y=18mm), a straight Bull's Eye strikes bone. Use <b>Subcostal Cephalad Triangulation</b>: enter at <b>CC = -2.0 cm</b> below the rib in <b>Insp Hold</b> and angle <b>+26° cephalad</b>.`,
+    `<b>Case 4 Pearl (Supracostal 11th–12th ICS Staghorn):</b> Puncturing the upper-pole compound calyx in the lower half of the 11th–12th ICS (just above the top edge of the 12th rib) during <b>Full Expiration</b> avoids the pleura and 11th subcostal artery while giving a straight caudal vector (<b>-14° coronal, 98% reach</b>).`,
     `<b>Case 5 Pearl (Morbid Obesity — 10.4 cm Depth):</b> At <b>${opt.tractDistMm} mm</b> tract length, a 3° pitch error misses the papilla by >6 mm! Furthermore, the posterior (${cal.z} mm) and anterior (${c.antCalyx.z} mm) calyces overlap on 0° AP—rotate the C-arm to <b>${cal.axialDeg}° Ipsilateral</b> to separate them.`,
-    `<b>Case 6 Pearl (Horseshoe / Malrotated Kidney):</b> Failed rotation leaves the calyces pointing posteromedially (<b>${cal.axialDeg}° axial</b>) and the lower pole tethered anteriorly. The <b>Upper Posterolateral Calyx</b> is subcostal, superficial (62 mm), and gives <b>97% reach</b>!`
+    `<b>Case 6 Pearl (Horseshoe / Malrotated Kidney):</b> Unlike normal kidneys, horseshoe kidneys fail to ascend completely and tether at the midline isthmus—so the <b>Upper Posterolateral Calyx is already SUBCOSTAL</b> (superficial 62 mm depth, 97% reach) on <b>Insp Hold</b>!`
   ];
   patientNotes.push(casePearls[state.caseIdx]);
 
@@ -1079,13 +1123,13 @@ function openAutomaticPunctureReview(d, c, cal, opt) {
       <td><b>Skin Entry (Point B)</b></td>
       <td>L=${state.latCm.toFixed(1)}cm, CC=${state.ccCm >= 0 ? '+' : ''}${state.ccCm.toFixed(1)}cm</td>
       <td>L=${opt.latCm.toFixed(1)}cm, CC=${opt.ccCm >= 0 ? '+' : ''}${opt.ccCm.toFixed(1)}cm</td>
-      <td>${Math.hypot(state.latCm - opt.latCm, state.ccCm - opt.ccCm) < 0.6 ? '<span style="color:#4ade80">Optimal Flank Window</span>' : '<span style="color:#fbbf24">Off Optimal Axis</span>'}</td>
+      <td>${usedSubcostalForSupracostal ? '<span style="color:#fbbf24">Subcostal Entry to Upper Pole</span>' : (Math.hypot(state.latCm - opt.latCm, state.ccCm - opt.ccCm) < 0.6 ? '<span style="color:#4ade80">Optimal Window</span>' : '<span style="color:#fbbf24">Off Optimal Axis</span>')}</td>
     </tr>
     <tr>
       <td><b>Coronal Aim (Plane 1)</b></td>
       <td>${state.corDeg.toFixed(1)}°</td>
       <td>${opt.corDeg.toFixed(1)}°</td>
-      <td>Dog-Leg Kink: <b>${d.dogLegDeg.toFixed(1)}°</b> (${d.dogLegDeg <= 18 ? 'Coaxial' : 'High Torque'})</td>
+      <td>Dog-Leg Kink: <b>${d.dogLegDeg.toFixed(1)}°</b> (${d.dogLegDeg <= 18 ? 'Coaxial' : 'High Torque / Hairpin'})</td>
     </tr>
     <tr>
       <td><b>Needle Pitch (Plane 2)</b></td>
