@@ -306,3 +306,13 @@
 </script>
 </body>
 </html>
+<script>
+  const v = Date.now();
+  document.querySelector('link[rel="stylesheet"]').href = 'styles.css?v=' + v;
+  ['cases.js', 'physics.js', 'renderer.js', 'controller.js'].forEach(src => {
+    const s = document.createElement('script');
+    s.src = src + '?v=' + v;
+    s.async = false;
+    document.body.appendChild(s);
+  });
+</script>
