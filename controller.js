@@ -1,6 +1,6 @@
 // ============================================================================
-// PCNL 2-DEVICE WIRELESS 3D PHONE CONTROLLER v3.0
-// True 3D Gravity Pitch + Gimbal-Free Medial Coronal Vector + Auto-Reconnect
+// PCNL 2-DEVICE WIRELESS 3D PHONE CONTROLLER v4.0
+// Full-Width Gyro Button + 3-in-1 Physical Push Engine + Auto-Reconnect
 // ============================================================================
 (function initWirelessControllerModule() {
   const urlParams = new URLSearchParams(window.location.search);
@@ -10,9 +10,6 @@
     return ((a - b + 540) % 360) - 180;
   }
 
-  // Convert W3C DeviceOrientation (alpha, beta, gamma) into true 3D unit vector
-  // of the phone's top axis (+Y_phone) in World Space (+X=East, +Y=North, +Z=Up)
-  // Using the exact 3D vector eliminates Euler Gimbal Lock when tilting!
   function getPhoneShaftVector3D(alphaDeg, betaDeg, gammaDeg) {
     const a = (alphaDeg || 0) * Math.PI / 180;
     const b = (betaDeg || 0) * Math.PI / 180;
@@ -22,25 +19,18 @@
     const cB = Math.cos(b), sB = Math.sin(b);
     const cG = Math.cos(g), sG = Math.sin(g);
 
-    // Phone +Y axis (pointing out the top edge of the phone)
     const vx = -sA * cB;
     const vy = cA * cB;
     const vz = sB;
 
-    // Also compute Phone -Z axis (out the back of the phone) in case phone is held upright
     const bx = -(cA * sG + sA * sB * cG);
     const by = -(sA * sG - cA * sB * cG);
-    const bz = -cB * cG;
 
-    // True horizontal compass heading of the phone's shaft (in degrees, 0..360)
-    // Fallback to back-vector heading if phone is held nearly 90° vertical
     const horizLen = Math.hypot(vx, vy);
     const hx = horizLen > 0.15 ? vx : bx;
     const hy = horizLen > 0.15 ? vy : by;
     const headingDeg = (Math.atan2(hx, hy) * 180 / Math.PI + 360) % 360;
 
-    // True Pitch from Vertical (0° = vertical straight down/up, 90° = flat horizontal on desk)
-    // Using full 3D tilt from vertical so rolling the phone in your hand doesn't corrupt pitch
     const elevFromDeskDeg = Math.asin(Math.max(-1, Math.min(1, Math.abs(vz)))) * 180 / Math.PI;
     const pitchFromVerticalDeg = 90 - elevFromDeskDeg;
 
@@ -67,10 +57,21 @@
     bootPhoneControllerUI(padCode.trim());
   } else {
     bootPCHostBridge();
+    // If opened on a mobile phone without ?pad=XXXX, show a quick-switch banner
+    if (/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)) {
+      const mobBanner = document.createElement('div');
+      mobBanner.style.cssText = 'position:fixed;bottom:0;left:0;right:0;background:#15803d;color:#fff;padding:10px;text-align:center;z-index:9999;font-weight:800;font-size:13px;cursor:pointer;';
+      mobBanner.textContent = '📱 ON A PHONE? TAP HERE TO OPEN 3D NEEDLE CONTROLLER';
+      mobBanner.onclick = () => {
+        const code = prompt('Enter the 4-digit Room Code shown on your PC:', '');
+        if (code) window.location.search = '?pad=' + code.trim();
+      };
+      document.body.appendChild(mobBanner);
+    }
   }
 
   // ==========================================================================
-  // MODE A: PC HOST BRIDGE (WITH AUTO-RECONNECT ON TAB SWITCH)
+  // MODE A: PC HOST BRIDGE
   // ==========================================================================
   function bootPCHostBridge() {
     let roomCode = sessionStorage.getItem('pcnl_room_code');
@@ -129,7 +130,6 @@
           }
 
           conn.on('open', () => {
-            // Send current PC state so phone doesn't overwrite on tab reconnect
             conn.send({
               type: 'sync_from_pc',
               pitchDeg: state.pitchDeg,
@@ -198,103 +198,101 @@
   // ==========================================================================
   function bootPhoneControllerUI(code) {
     document.body.innerHTML = `
-      <div style="display:flex;flex-direction:column;height:100vh;width:100vw;background:#050811;color:#f1f5f9;font-family:sans-serif;overflow:hidden;touch-action:none;user-select:none;">
-        <div style="padding:8px 12px;background:#0a101d;border-bottom:1px solid #1e293b;display:flex;justify-content:space-between;align-items:center;">
-          <div>
-            <div style="font-weight:800;font-size:13px;color:#38bdf8;">CHIBA 18G 3D CONTROLLER v3.0</div>
-            <div id="phoneConnStatus" style="font-size:10.5px;color:#fbbf24;">Connecting to PC Room ${code}...</div>
-          </div>
-          <button id="enableSensorsBtn" style="background:#15803d;color:#fff;border:1px solid #22c55e;padding:6px 10px;border-radius:5px;font-weight:800;font-size:11px;">
-            1. TAP TO START 3D SENSORS
-          </button>
+      <div style="display:flex;flex-direction:column;height:100dvh;max-height:100vh;width:100vw;background:#050811;color:#f1f5f9;font-family:sans-serif;overflow:hidden;touch-action:none;user-select:none;box-sizing:border-box;">
+        <!-- Unmissable Full-Width Gyro Activation Banner -->
+        <button id="enableSensorsBtn" style="width:100%;background:#16a34a;color:#fff;border:none;border-bottom:2px solid #4ade80;padding:12px 10px;font-weight:900;font-size:14px;text-align:center;cursor:pointer;flex-shrink:0;">
+          🟢 1. TAP HERE TO ENABLE 3D GYRO SENSORS
+        </button>
+
+        <div style="padding:4px 10px;background:#0a101d;border-bottom:1px solid #1e293b;display:flex;justify-content:space-between;align-items:center;font-size:10.5px;flex-shrink:0;">
+          <span id="phoneConnStatus" style="color:#fbbf24;font-weight:700;">Connecting to PC Room ${code}...</span>
+          <span id="pTissueBanner" style="color:#7dd3fc;font-weight:700;">0mm: Skin Surface</span>
         </div>
 
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;padding:8px;background:#080d18;border-bottom:1px solid #1e293b;text-align:center;">
-          <div style="background:#0f172a;padding:6px;border-radius:5px;border:1px solid #1e293b;">
-            <div style="font-size:9.5px;color:#94a3b8;">PITCH (10°=Vert)</div>
-            <div id="pPitchVal" style="font-size:18px;font-weight:800;color:#38bdf8;font-family:monospace;">30.0°</div>
+        <!-- Live 3D Readout -->
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;padding:6px;background:#080d18;border-bottom:1px solid #1e293b;text-align:center;flex-shrink:0;">
+          <div style="background:#0f172a;padding:4px;border-radius:4px;border:1px solid #1e293b;">
+            <div style="font-size:9px;color:#94a3b8;">PITCH (10°=Vert)</div>
+            <div id="pPitchVal" style="font-size:16px;font-weight:800;color:#38bdf8;font-family:monospace;">30.0°</div>
           </div>
-          <div style="background:#0f172a;padding:6px;border-radius:5px;border:1px solid #1e293b;">
-            <div style="font-size:9.5px;color:#94a3b8;">CORONAL (0°=Left)</div>
-            <div id="pCorVal" style="font-size:18px;font-weight:800;color:#4ade80;font-family:monospace;">22.0°</div>
+          <div style="background:#0f172a;padding:4px;border-radius:4px;border:1px solid #1e293b;">
+            <div style="font-size:9px;color:#94a3b8;">CORONAL (0°=Left)</div>
+            <div id="pCorVal" style="font-size:16px;font-weight:800;color:#4ade80;font-family:monospace;">+22.0°</div>
           </div>
-          <div style="background:#0f172a;padding:6px;border-radius:5px;border:1px solid #1e293b;">
-            <div style="font-size:9.5px;color:#94a3b8;">DEPTH (1:1 MM)</div>
-            <div id="pDepthVal" style="font-size:18px;font-weight:800;color:#fde047;font-family:monospace;">0 mm</div>
+          <div style="background:#0f172a;padding:4px;border-radius:4px;border:1px solid #1e293b;">
+            <div style="font-size:9px;color:#94a3b8;">NEEDLE DEPTH</div>
+            <div id="pDepthVal" style="font-size:16px;font-weight:800;color:#fde047;font-family:monospace;">0 mm</div>
           </div>
         </div>
 
-        <div id="pTissueBanner" style="padding:5px 10px;background:#111a2e;color:#7dd3fc;font-size:11px;font-weight:700;text-align:center;border-bottom:1px solid #1e293b;">
-          HAPTIC LAYER: 0mm On Skin Surface
-        </div>
-
-        <div style="flex:1;display:grid;grid-template-columns:1.18fr 1fr;min-height:0;">
-          <div style="padding:8px;display:flex;flex-direction:column;gap:6px;border-right:1px solid #1e293b;overflow-y:auto;">
-            <button id="calMonitorBtn" style="background:#0284c7;color:#fff;border:1px solid #38bdf8;padding:10px 6px;border-radius:6px;font-weight:800;font-size:11px;line-height:1.25;">
-              🎯 2. POINT PHONE AT PC SCREEN (12 O'CLOCK) &amp; TAP TO CALIBRATE
+        <!-- Main Workspace -->
+        <div style="flex:1;display:grid;grid-template-columns:1.15fr 1fr;min-height:0;overflow:hidden;">
+          <!-- Left Column: Calibration & OR Controls -->
+          <div style="padding:7px;display:flex;flex-direction:column;gap:5px;border-right:1px solid #1e293b;overflow-y:auto;">
+            <button id="calMonitorBtn" style="background:#0284c7;color:#fff;border:1px solid #38bdf8;padding:9px 6px;border-radius:5px;font-weight:800;font-size:10.5px;line-height:1.2;">
+              🎯 2. POINT AT PC SCREEN (12 O'CLOCK) &amp; TAP TO CALIBRATE
             </button>
 
-            <button id="calMedialBtn" style="background:#0f766e;color:#fff;border:1px solid #2dd4bf;padding:8px 6px;border-radius:6px;font-weight:700;font-size:10.5px;">
-              🎯 Or Calibrate Pointing Left (Medial = 0°)
-            </button>
-
-            <button id="clutchBtn" style="background:#1e293b;color:#f8fafc;border:1px solid #475569;padding:9px 6px;border-radius:6px;font-weight:700;font-size:11px;">
+            <button id="clutchBtn" style="background:#1e293b;color:#f8fafc;border:1px solid #475569;padding:8px 6px;border-radius:5px;font-weight:700;font-size:10.5px;">
               🔓 3D Gyro: LIVE (Tap to Freeze)
             </button>
 
-            <!-- Live 2D Needle Compass Preview (Matches PC Screen!) -->
-            <canvas id="compassCanvas" width="160" height="90" style="width:100%;height:76px;background:#090f1c;border:1px solid #1e293b;border-radius:5px;"></canvas>
+            <canvas id="compassCanvas" width="150" height="72" style="width:100%;height:64px;background:#090f1c;border:1px solid #1e293b;border-radius:4px;flex-shrink:0;"></canvas>
 
-            <button id="pPedalBtn" style="background:#b45309;color:#fff;border:1px solid #f59e0b;padding:12px 6px;border-radius:6px;font-weight:800;font-size:12.5px;">
+            <button id="pPedalBtn" style="background:#b45309;color:#fff;border:1px solid #f59e0b;padding:10px 6px;border-radius:5px;font-weight:800;font-size:12px;">
               ☢ HOLD FLUORO PEDAL
             </button>
 
-            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;">
-              <button id="c0Btn" style="padding:7px 3px;font-size:10px;font-weight:700;">0° AP</button>
-              <button id="c30AxBtn" style="padding:7px 3px;font-size:10px;font-weight:700;">30° Eye</button>
-              <button id="c30ObBtn" style="padding:7px 3px;font-size:10px;font-weight:700;">30° Ceph</button>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:3px;">
+              <button id="c0Btn" style="padding:6px 2px;font-size:9.5px;font-weight:700;">0° AP</button>
+              <button id="c30AxBtn" style="padding:6px 2px;font-size:9.5px;font-weight:700;">30° Eye</button>
+              <button id="c30ObBtn" style="padding:6px 2px;font-size:9.5px;font-weight:700;">30° Ceph</button>
             </div>
 
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-top:auto;">
-              <button id="pStyletBtn" style="background:#1d4ed8;color:#fff;padding:8px 4px;border-radius:5px;font-weight:700;font-size:10.5px;">Pull Stylet</button>
-              <button id="pContrastBtn" style="background:#0f766e;color:#fff;padding:8px 4px;border-radius:5px;font-weight:700;font-size:10.5px;">Contrast</button>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px;margin-top:auto;">
+              <button id="pStyletBtn" style="background:#1d4ed8;color:#fff;padding:7px 3px;border-radius:4px;font-weight:700;font-size:10px;">Pull Stylet</button>
+              <button id="pContrastBtn" style="background:#0f766e;color:#fff;padding:7px 3px;border-radius:4px;font-weight:700;font-size:10px;">Contrast</button>
             </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">
-              <button id="invertPushBtn" style="background:#172234;color:#94a3b8;padding:6px;border-radius:5px;font-size:9.5px;">⇄ Invert Push</button>
-              <button id="retractZeroBtn" style="background:#334155;color:#e2e8f0;padding:6px;border-radius:5px;font-size:9.5px;">0mm Skin</button>
-            </div>
+            <button id="retractZeroBtn" style="background:#334155;color:#e2e8f0;padding:5px;border-radius:4px;font-size:9.5px;">
+              Reset Depth to 0mm (Skin)
+            </button>
           </div>
 
-          <div id="stabilizerTrack" style="position:relative;background:linear-gradient(180deg,#091326 0%,#0f1f3d 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden;">
-            <div style="position:absolute;top:10px;left:8px;right:8px;text-align:center;font-size:10px;color:#7dd3fc;font-weight:700;pointer-events:none;line-height:1.3;">
-              LEFT FINGER = SKIN ANCHOR<br>
-              <span style="color:#cbd5e1;font-weight:400;">Hold left finger still &amp; push phone forward!</span>
+          <!-- Right Column: 3-in-1 Depth Push Track -->
+          <div style="display:flex;flex-direction:column;height:100%;background:#091326;user-select:none;">
+            <button id="holdPushInBtn" style="background:#15803d;color:#fff;border:none;border-bottom:1px solid #22c55e;padding:12px 4px;font-weight:800;font-size:11px;flex-shrink:0;">
+              ▲ HOLD TO PUSH IN (+MM)
+            </button>
+
+            <div id="stabilizerTrack" style="flex:1;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;">
+              <div style="position:absolute;top:6px;left:4px;right:4px;text-align:center;font-size:9.5px;color:#7dd3fc;font-weight:700;pointer-events:none;line-height:1.2;z-index:2;">
+                ⚓ HOLD ANCHOR &amp; PUSH PHONE<br>
+                <span style="color:#cbd5e1;font-weight:400;">(Or slide finger up/down ruler)</span>
+              </div>
+              <canvas id="rulerCanvas" style="width:100%;height:100%;display:block;"></canvas>
             </div>
-            <canvas id="rulerCanvas" style="width:100%;height:100%;display:block;"></canvas>
+
+            <button id="holdPullBackBtn" style="background:#991b1b;color:#fff;border:none;border-top:1px solid #f87171;padding:12px 4px;font-weight:800;font-size:11px;flex-shrink:0;">
+              ▼ HOLD TO PULL BACK (-MM)
+            </button>
           </div>
         </div>
       </div>
     `;
 
-    let peer = null;
-    let conn = null;
-    let lastPong = performance.now();
-
+    let peer = null, conn = null, lastPong = performance.now();
     let rawAlpha = 0, rawBeta = 30, rawGamma = 0;
-    // Reference heading for Medial (9 o'clock = Left on PC screen, where Coronal = 0°)
     let medialRefHeading = 270;
-    let smoothPitch = 30.0, smoothCor = 22.0;
-    let curDepthMm = 0;
-    let gyroFrozen = false;
-    let invertPush = false;
+    let smoothPitch = 30.0, smoothCor = 22.0, curDepthMm = 0;
+    let gyroFrozen = false, sensorsActive = false;
+    let isAnchorHeld = false, driveRateMmPerSec = 0;
+    let forwardVelMm = 0, lastGravityY = 0;
 
-    // Auto-Reconnecting Phone PeerJS Client
     loadPeerJS(0, () => {
       function connectToPC() {
-        const st = document.getElementById('phoneConnStatus');
         if (!peer || peer.destroyed) {
           peer = new Peer();
-          peer.on('open', () => openDataChannel());
+          peer.on('open', openDataChannel);
           peer.on('disconnected', () => peer.reconnect());
         } else if (peer.disconnected) {
           peer.reconnect();
@@ -305,12 +303,11 @@
 
       function openDataChannel() {
         if (conn && conn.open) return;
-        const st = document.getElementById('phoneConnStatus');
-        if (st) { st.textContent = `Reconnecting to PC ${code}...`; st.style.color = '#fbbf24'; }
         conn = peer.connect('pcnl-or-' + code, { reliable: true });
         conn.on('open', () => {
           lastPong = performance.now();
-          if (st) { st.textContent = '✓ Paired Live to PC Monitor!'; st.style.color = '#4ade80'; }
+          const st = document.getElementById('phoneConnStatus');
+          if (st) { st.textContent = '✓ Connected to PC!'; st.style.color = '#4ade80'; }
           sendNeedleUpdate();
         });
         conn.on('data', msg => {
@@ -321,42 +318,25 @@
             drawRuler();
           } else if (msg.type === 'haptic_feedback') {
             const banner = document.getElementById('pTissueBanner');
-            banner.textContent = `${msg.layer} (${msg.force.toFixed(1)} N)`;
+            if (banner) banner.textContent = `${msg.layer.split('[')[0]} (${msg.force.toFixed(1)}N)`;
             if (msg.pop === 'skin' && navigator.vibrate) navigator.vibrate(35);
-            else if (msg.pop === 'fascia') {
-              if (navigator.vibrate) navigator.vibrate([75, 30, 75]);
-              banner.style.background = '#7c2d12';
-            } else if (msg.pop === 'papilla') {
-              if (navigator.vibrate) navigator.vibrate([120]);
-              banner.style.background = '#14532d';
-            } else if (msg.ribHit) {
-              if (navigator.vibrate) navigator.vibrate([180, 40, 180]);
-              banner.style.background = '#7f1d1d';
-            } else {
-              banner.style.background = '#111a2e';
-            }
+            else if (msg.pop === 'fascia' && navigator.vibrate) navigator.vibrate([75, 30, 75]);
+            else if (msg.pop === 'papilla' && navigator.vibrate) navigator.vibrate([130]);
+            else if (msg.ribHit && navigator.vibrate) navigator.vibrate([180, 40, 180]);
           }
         });
       }
 
       connectToPC();
-
-      // Heartbeat & Automatic Reconnect on Tab Switch / Wake
       setInterval(() => {
         if (conn && conn.open) {
           conn.send({ type: 'ping' });
-          if (performance.now() - lastPong > 4500) {
-            conn.close();
-            connectToPC();
-          }
+          if (performance.now() - lastPong > 4500) { conn.close(); connectToPC(); }
         } else {
           connectToPC();
         }
       }, 1500);
-
-      document.addEventListener('visibilitychange', () => {
-        if (!document.hidden) connectToPC();
-      });
+      document.addEventListener('visibilitychange', () => { if (!document.hidden) connectToPC(); });
       window.addEventListener('focus', connectToPC);
     });
 
@@ -364,35 +344,20 @@
       const c = document.getElementById('compassCanvas');
       if (!c) return;
       const ctx = c.getContext('2d');
-      const w = c.width, h = c.height;
+      const w = c.width, h = c.height, tx = 40, ty = h * 0.55;
       ctx.clearRect(0, 0, w, h);
-
-      // Draw kidney/pelvis target on the left (Medial) and needle shaft entering from right (Lateral)
-      const tx = 44, ty = h * 0.55;
       ctx.fillStyle = '#1e293b';
-      ctx.beginPath(); ctx.arc(tx, ty, 14, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = '#38bdf8';
-      ctx.font = 'bold 9px sans-serif';
-      ctx.fillText('SPINE/PELVIS', 6, 13);
-      ctx.fillText('HEAD ↑', w * 0.45, 13);
+      ctx.beginPath(); ctx.arc(tx, ty, 12, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = '#38bdf8'; ctx.font = 'bold 8.5px sans-serif';
+      ctx.fillText('← MEDIAL (0°)', 4, 11);
+      ctx.fillText('SCREEN ↑', w * 0.55, 11);
 
-      // Needle vector matching PC screen (0° = pointing straight left; +corDeg = pointing left & up)
       const rad = smoothCor * Math.PI / 180;
-      const len = 62;
-      const hx = tx + Math.cos(rad) * len;
-      const hy = ty + Math.sin(rad) * len;
-
-      ctx.beginPath();
-      ctx.moveTo(hx, hy);
-      ctx.lineTo(tx, ty);
-      ctx.lineWidth = 3;
-      ctx.strokeStyle = '#4ade80';
-      ctx.stroke();
-
-      ctx.beginPath();
-      ctx.arc(hx, hy, 5, 0, Math.PI * 2);
-      ctx.fillStyle = '#f59e0b';
-      ctx.fill();
+      const hx = tx + Math.cos(rad) * 55, hy = ty + Math.sin(rad) * 55;
+      ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(tx, ty);
+      ctx.lineWidth = 3; ctx.strokeStyle = '#4ade80'; ctx.stroke();
+      ctx.beginPath(); ctx.arc(hx, hy, 4.5, 0, Math.PI * 2);
+      ctx.fillStyle = '#f59e0b'; ctx.fill();
     }
 
     function sendNeedleUpdate() {
@@ -407,17 +372,20 @@
     }
 
     function handleOrientation(e) {
-      if (e.alpha === null) return;
-      rawAlpha = e.alpha; rawBeta = e.beta; rawGamma = e.gamma;
+      if (e.alpha === null && e.beta === null) return;
+      if (!sensorsActive) {
+        sensorsActive = true;
+        const btn = document.getElementById('enableSensorsBtn');
+        if (btn) {
+          btn.textContent = '✓ 3D GYRO ACTIVE — TILT & ROTATE PHONE';
+          btn.style.background = '#0284c7';
+        }
+      }
+      rawAlpha = e.alpha || 0; rawBeta = e.beta || 0; rawGamma = e.gamma || 0;
       if (gyroFrozen) return;
 
       const vec = getPhoneShaftVector3D(rawAlpha, rawBeta, rawGamma);
-
-      // 1. True Gravity Pitch: 10° = Vertical (steep), 60° = Flat (horizontal)
       const targetPitch = Math.max(10, Math.min(60, vec.pitchFromVerticalDeg));
-
-      // 2. True Coronal Angle relative to Medial (9 o'clock = Left):
-      // Turning phone clockwise from 9 o'clock toward 12 o'clock (PC Screen = Cephalad) gives +Coronal!
       const targetCor = Math.max(-75, Math.min(75, angleDiff(vec.headingDeg, medialRefHeading)));
 
       smoothPitch = smoothPitch * 0.72 + targetPitch * 0.28;
@@ -425,33 +393,53 @@
       sendNeedleUpdate();
     }
 
-    document.getElementById('enableSensorsBtn').onclick = async function () {
+    // Physical Forward Push Accelerometer Engine (Active while holding Skin Anchor)
+    function handleMotion(e) {
+      if (!isAnchorHeld) { forwardVelMm = 0; return; }
+      let ay = 0;
+      if (e.acceleration && e.acceleration.y !== null) {
+        ay = e.acceleration.y;
+      } else if (e.accelerationIncludingGravity && e.accelerationIncludingGravity.y !== null) {
+        const gy = e.accelerationIncludingGravity.y;
+        ay = gy - lastGravityY;
+        lastGravityY = lastGravityY * 0.8 + gy * 0.2;
+      }
+      // Deadband filter + ZUPT damping so forward hand push advances needle smoothly
+      if (Math.abs(ay) > 0.35) {
+        forwardVelMm = forwardVelMm * 0.85 + Math.abs(ay) * 4.5;
+        curDepthMm = Math.max(0, Math.min(135, curDepthMm + forwardVelMm * 0.04));
+        sendNeedleUpdate();
+      } else {
+        forwardVelMm *= 0.6;
+      }
+    }
+
+    async function activateSensors() {
       try {
         if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
           await DeviceOrientationEvent.requestPermission();
         }
+        if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+          await DeviceMotionEvent.requestPermission();
+        }
       } catch (err) {}
       window.addEventListener('deviceorientation', handleOrientation);
-      this.textContent = '✓ 3D GYRO ON';
-      this.style.background = '#0284c7';
-      // Default calibration assuming phone is pointed at monitor (12 o'clock)
-      const vec = getPhoneShaftVector3D(rawAlpha, rawBeta, rawGamma);
-      medialRefHeading = (vec.headingDeg - 90 + 360) % 360;
-    };
+      window.addEventListener('devicemotion', handleMotion);
+      const btn = document.getElementById('enableSensorsBtn');
+      if (btn) {
+        btn.textContent = '✓ 3D GYRO ACTIVE — TILT & ROTATE PHONE';
+        btn.style.background = '#0284c7';
+      }
+    }
 
-    // Calibrate by pointing phone straight at PC Screen (12 o'clock = Cephalad = +90° from Medial)
+    // Try auto-starting on load (works on Android) + bind to big top button (for iPhone iOS)
+    window.addEventListener('deviceorientation', handleOrientation);
+    window.addEventListener('devicemotion', handleMotion);
+    document.getElementById('enableSensorsBtn').onclick = activateSensors;
+
     document.getElementById('calMonitorBtn').onclick = () => {
       const vec = getPhoneShaftVector3D(rawAlpha, rawBeta, rawGamma);
-      // If current heading is 12 o'clock (Cephalad), then Medial (9 o'clock, Coronal=0°) is 90° counter-clockwise!
       medialRefHeading = (vec.headingDeg - 90 + 360) % 360;
-      if (navigator.vibrate) navigator.vibrate(45);
-      sendNeedleUpdate();
-    };
-
-    // Or calibrate while pointing phone straight Left (9 o'clock = Medial = 0° Coronal)
-    document.getElementById('calMedialBtn').onclick = () => {
-      const vec = getPhoneShaftVector3D(rawAlpha, rawBeta, rawGamma);
-      medialRefHeading = vec.headingDeg;
       if (navigator.vibrate) navigator.vibrate(45);
       sendNeedleUpdate();
     };
@@ -462,29 +450,48 @@
       this.style.background = gyroFrozen ? '#b45309' : '#1e293b';
     };
 
-    document.getElementById('invertPushBtn').onclick = function () {
-      invertPush = !invertPush;
-      this.textContent = `⇄ Invert Push (${invertPush ? 'Inv' : 'Norm'})`;
-    };
+    // Continuous Hold-to-Push / Hold-to-Retract Loop (60 FPS)
+    setInterval(() => {
+      if (driveRateMmPerSec !== 0) {
+        curDepthMm = Math.max(0, Math.min(135, curDepthMm + driveRateMmPerSec * 0.05));
+        sendNeedleUpdate();
+      }
+    }, 50);
 
+    const pushInBtn = document.getElementById('holdPushInBtn');
+    const pullBackBtn = document.getElementById('holdPullBackBtn');
+    pushInBtn.addEventListener('pointerdown', e => { e.preventDefault(); driveRateMmPerSec = 12; });
+    pushInBtn.addEventListener('pointerup', () => { driveRateMmPerSec = 0; });
+    pushInBtn.addEventListener('pointercancel', () => { driveRateMmPerSec = 0; });
+
+    pullBackBtn.addEventListener('pointerdown', e => { e.preventDefault(); driveRateMmPerSec = -12; });
+    pullBackBtn.addEventListener('pointerup', () => { driveRateMmPerSec = 0; });
+    pullBackBtn.addEventListener('pointercancel', () => { driveRateMmPerSec = 0; });
+
+    // Skin Anchor Pad: Supports BOTH Physical Forward Push AND 1:1 Finger Sliding
     const track = document.getElementById('stabilizerTrack');
     const rCanvas = document.getElementById('rulerCanvas');
     let touchStartY = null, startDepthMm = 0;
-    const PX_PER_MM = 3.78;
+    const PX_PER_MM = 3.2;
 
     track.addEventListener('pointerdown', e => {
-      touchStartY = e.clientY; startDepthMm = curDepthMm;
+      isAnchorHeld = true;
+      touchStartY = e.clientY;
+      startDepthMm = curDepthMm;
       track.setPointerCapture(e.pointerId);
     });
     track.addEventListener('pointermove', e => {
       if (touchStartY === null) return;
       const dyPx = touchStartY - e.clientY;
-      const deltaMm = (dyPx / PX_PER_MM) * (invertPush ? -1 : 1);
-      curDepthMm = Math.max(0, Math.min(135, startDepthMm + deltaMm));
-      sendNeedleUpdate();
+      if (Math.abs(dyPx) > 3) {
+        curDepthMm = Math.max(0, Math.min(135, startDepthMm + dyPx / PX_PER_MM));
+        touchStartY = e.clientY;
+        startDepthMm = curDepthMm;
+        sendNeedleUpdate();
+      }
     });
-    track.addEventListener('pointerup', () => { touchStartY = null; });
-    track.addEventListener('pointercancel', () => { touchStartY = null; });
+    track.addEventListener('pointerup', () => { isAnchorHeld = false; touchStartY = null; });
+    track.addEventListener('pointercancel', () => { isAnchorHeld = false; touchStartY = null; });
 
     function drawRuler() {
       const rect = rCanvas.getBoundingClientRect();
@@ -494,18 +501,19 @@
       const ctx = rCanvas.getContext('2d');
       const w = rCanvas.width, h = rCanvas.height, centerY = h * 0.55;
       ctx.clearRect(0, 0, w, h);
-      ctx.strokeStyle = '#38bdf8'; ctx.fillStyle = '#94a3b8'; ctx.font = 'bold 11px monospace';
+      ctx.strokeStyle = '#38bdf8'; ctx.fillStyle = '#94a3b8'; ctx.font = 'bold 10.5px monospace';
       for (let mm = 0; mm <= 130; mm += 2) {
         const y = centerY - (mm - curDepthMm) * PX_PER_MM;
-        if (y < 45 || y > h - 10) continue;
+        if (y < 36 || y > h - 8) continue;
         const isCm = mm % 10 === 0;
-        ctx.beginPath(); ctx.moveTo(w - (isCm ? 36 : 16), y); ctx.lineTo(w, y);
+        ctx.beginPath(); ctx.moveTo(w - (isCm ? 32 : 14), y); ctx.lineTo(w, y);
         ctx.lineWidth = isCm ? 2 : 1; ctx.stroke();
-        if (isCm) ctx.fillText(`${mm}mm`, w - 76, y + 4);
+        if (isCm) ctx.fillText(`${mm}mm`, w - 70, y + 4);
       }
       ctx.beginPath(); ctx.moveTo(0, centerY); ctx.lineTo(w, centerY);
-      ctx.lineWidth = 3; ctx.strokeStyle = '#f59e0b'; ctx.stroke();
-      ctx.fillStyle = '#fde047'; ctx.fillText('▶ SKIN ANCHOR', 8, centerY - 6);
+      ctx.lineWidth = 3; ctx.strokeStyle = isAnchorHeld ? '#4ade80' : '#f59e0b'; ctx.stroke();
+      ctx.fillStyle = isAnchorHeld ? '#4ade80' : '#fde047';
+      ctx.fillText(isAnchorHeld ? '⚓ ANCHOR HELD (PUSH!)' : '▶ SKIN ANCHOR', 6, centerY - 6);
     }
     setTimeout(() => { drawRuler(); drawCompassPreview(); }, 100);
 
