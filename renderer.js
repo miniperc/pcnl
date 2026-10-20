@@ -1,57 +1,11 @@
 // ============================================================================
-// FILE: renderer.js — PATHOLOGY-SPECIFIC C-ARM RENDERER & PROFESSOR PLAYBOOK UI
+// FILE: renderer.js — C-ARM COLONIC GAS, CLEAN AXIAL CT & NO-CHEAT RENDERER
 // ============================================================================
-(function injectProfessorPlaybookUI() {
-  const sidebar = document.querySelector('.sidebar');
-  const coachCard = document.querySelector('.coach-card');
-  if (!sidebar || !coachCard || document.getElementById('profPlaybookCard')) return;
-
-  const pb = document.createElement('div');
-  pb.id = 'profPlaybookCard';
-  pb.style.cssText = 'background:#071324;border:1px solid #0284c7;border-radius:5px;padding:7px 9px;font-size:10.6px;line-height:1.35;color:#e2e8f0;';
-  pb.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;" onclick="const b=document.getElementById('profPlaybookBody');b.style.display=b.style.display==='none'?'block':'none';">
-      <span style="font-weight:800;color:#38bdf8;font-size:11px;">👨‍🏫 PROFESSOR'S OR PLAYBOOK &amp; TRICK</span>
-      <span style="font-size:9.5px;color:#7dd3fc;">[Tap to Toggle]</span>
-    </div>
-    <div id="profPlaybookBody" style="margin-top:5px;display:block;"></div>
-  `;
-  sidebar.insertBefore(pb, coachCard.nextSibling);
-})();
-
-let lastPlaybookKey = '';
-function updateProfessorPlaybookPanel() {
-  const body = document.getElementById('profPlaybookBody');
-  if (!body) return;
-  const key = `${state.caseIdx}_${state.targetKey}`;
-  if (key === lastPlaybookKey) return;
-  lastPlaybookKey = key;
-
-  const c = CASES[state.caseIdx];
-  const cal = c.calyces[state.targetKey];
-  const pb = c.profPlaybook;
-  if (!pb) return;
-
-  body.innerHTML = `
-    <div style="color:#fca5a5;margin-bottom:4px;"><b>⚠️ The Trap:</b> ${pb.trap}</div>
-    <div style="color:#fde047;margin-bottom:5px;background:rgba(234,179,8,0.1);padding:4px 6px;border-radius:4px;border-left:2px solid #eab308;">
-      <b>💡 ${pb.trick}</b>
-    </div>
-    <div style="color:#86efac;margin-bottom:4px;"><b>🎯 Selected Calyx (${cal.label}):</b> ${cal.calyxNote || ''}</div>
-    <div style="color:#cbd5e1;font-size:10.2px;border-top:1px solid #1e293b;padding-top:4px;">
-      <b>Step-by-Step Guide to Beat This Case:</b>
-      <div style="margin-top:2px;display:flex;flex-direction:column;gap:2px;">
-        ${pb.steps.map(s => `<div>${s}</div>`).join('')}
-      </div>
-    </div>
-  `;
-}
-
-// Enhance Case 10 (Hypermobile Kidney) tenting if Saline Distend (hydro) is OFF
 const _origGetLiveAnatomy = window.getLiveAnatomy;
 if (typeof _origGetLiveAnatomy === 'function') {
   window.getLiveAnatomy = function () {
     const live = _origGetLiveAnatomy();
+    // Case 10: Hypermobile kidney tents away if Saline Distend (hydro) is OFF
     if (state.caseIdx === 9 && state.depthMm > 45 && !state.hydro) {
       const ng = getNeedle3D();
       const extraPush = Math.min(7.5, (state.depthMm - 45) * 0.35);
@@ -81,9 +35,11 @@ function loop(now) {
   const dt = (now - lastT) / 1000;
   lastT = now;
 
-  updateProfessorPlaybookPanel();
   if (state.autoPlaying) tickAutoSolve(dt);
-  if (state.respMode === 'tidal') { state.tidalPhase += dt * 1.8; if (state.contFluoro) state.lihDirty = true; }
+  if (state.respMode === 'tidal') {
+    state.tidalPhase += dt * 1.8;
+    if (state.contFluoro || state.pedalDown) state.lihDirty = true;
+  }
 
   const liveFluoro = state.contFluoro || state.pedalDown || state.autoPlaying;
   resizeAll();
@@ -106,7 +62,7 @@ function loop(now) {
 }
 
 // ----------------------------------------------------------------------------
-// 1. FLUOROSCOPY SCENE RENDERER (WITH CASE-SPECIFIC PATHOLOGY VISUALS)
+// 1. C-ARM FLUOROSCOPY (WITH RADIOLUCENT COLONIC GAS HAUSTRATION)
 // ----------------------------------------------------------------------------
 function drawFluoroBuffer(ctx, w, h) {
   ctx.save();
@@ -134,6 +90,7 @@ function drawFluoroBuffer(ctx, w, h) {
     return { x: cx + p.u * scale, y: cy - p.v * scale };
   };
 
+  // Spine Vertebral Bodies
   for (let vy = -44; vy <= 44; vy += 28) {
     const vc = proj({ x: 10, y: vy, z: 75 });
     ctx.fillStyle = 'rgba(92, 105, 122, 0.42)';
@@ -142,30 +99,51 @@ function drawFluoroBuffer(ctx, w, h) {
     ctx.fillRect(vc.x + 14 * scale, tp.y - 3.5 * scale, 16 * scale, 7 * scale);
   }
 
-  // Case 6: Horseshoe Kidney Midline Parenchymal Isthmus Shadow
+  // RADIOLUCENT COLONIC GAS BUBBLES (HAUSTRA) ON C-ARM FLUOROSCOPY
+  // In Case 8 (Retrorenal Colon), gas loop sits medially at x=102mm behind the kidney!
+  const isRetroColon = c.stoneType === 'retrorenal_colon';
+  const colX = isRetroColon ? 104 : 132;
+  const colZ = isRetroColon ? 38 : 58;
+  const haustra = [
+    { dy: -38, rx: 11, ry: 8 },
+    { dy: -24, rx: 13, ry: 9 },
+    { dy: -9,  rx: 12, ry: 8.5 },
+    { dy: 6,   rx: 11, ry: 8 },
+    { dy: 20,  rx: 10, ry: 7 }
+  ];
+  ctx.save();
+  haustra.forEach(hb => {
+    const pc = proj({ x: colX + Math.sin(hb.dy) * 2, y: hb.dy, z: colZ });
+    ctx.beginPath();
+    ctx.ellipse(pc.x, pc.y, hb.rx * scale, hb.ry * scale, -0.1, 0, Math.PI * 2);
+    ctx.fillStyle = isRetroColon ? 'rgba(248, 250, 252, 0.46)' : 'rgba(241, 245, 249, 0.30)';
+    ctx.fill();
+    ctx.lineWidth = 1.2 * scale;
+    ctx.strokeStyle = 'rgba(100, 116, 139, 0.38)';
+    ctx.stroke();
+  });
+  if (isRetroColon) {
+    const pLbl = proj({ x: colX, y: -48, z: colZ });
+    ctx.fillStyle = 'rgba(71, 85, 105, 0.75)';
+    ctx.font = `bold ${Math.max(9, Math.round(scale * 3.1))}px sans-serif`;
+    ctx.fillText('Colon Gas', pLbl.x - 16 * scale, pLbl.y);
+  }
+  ctx.restore();
+
+  // Case 6: Horseshoe Kidney Midline Isthmus
   if (c.stoneType === 'horseshoe') {
     const isth1 = proj({ x: 12, y: -24, z: 82 });
     const isth2 = proj({ x: 66, y: -18, z: 76 });
-    ctx.beginPath();
-    ctx.moveTo(isth1.x, isth1.y);
-    ctx.lineTo(isth2.x, isth2.y);
-    ctx.lineWidth = 22 * scale;
-    ctx.strokeStyle = 'rgba(100, 116, 139, 0.28)';
-    ctx.lineCap = 'round';
-    ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(isth1.x, isth1.y); ctx.lineTo(isth2.x, isth2.y);
+    ctx.lineWidth = 22 * scale; ctx.strokeStyle = 'rgba(100, 116, 139, 0.28)'; ctx.lineCap = 'round'; ctx.stroke();
   }
 
   const drawRib = (ry, lbl) => {
     const r1 = proj({ x: 26, y: ry + 14, z: 18 });
     const r2 = proj({ x: 74, y: ry + 4, z: 18 });
     const r3 = proj({ x: 118, y: ry - 5, z: 22 });
-    ctx.beginPath();
-    ctx.moveTo(r1.x, r1.y);
-    ctx.quadraticCurveTo(r2.x, r2.y, r3.x, r3.y);
-    ctx.lineWidth = 8.5 * scale;
-    ctx.strokeStyle = 'rgba(82, 94, 110, 0.54)';
-    ctx.lineCap = 'round';
-    ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(r1.x, r1.y); ctx.quadraticCurveTo(r2.x, r2.y, r3.x, r3.y);
+    ctx.lineWidth = 8.5 * scale; ctx.strokeStyle = 'rgba(82, 94, 110, 0.54)'; ctx.lineCap = 'round'; ctx.stroke();
     ctx.fillStyle = '#334155';
     ctx.font = `bold ${Math.max(10, Math.round(scale * 3.8))}px sans-serif`;
     ctx.fillText(lbl, r3.x - 16 * scale, r3.y - 6 * scale);
@@ -175,12 +153,9 @@ function drawFluoroBuffer(ctx, w, h) {
 
   const u1 = proj({ x: c.pelvis.x - 12, y: -72, z: c.pelvis.z });
   const u2 = proj(c.pelvis);
-  ctx.beginPath();
-  ctx.moveTo(u1.x, u1.y);
+  ctx.beginPath(); ctx.moveTo(u1.x, u1.y);
   ctx.quadraticCurveTo(u1.x + (c.stoneType === 'horseshoe' ? 18 : 7) * scale, (u1.y + u2.y) / 2, u2.x, u2.y);
-  ctx.lineWidth = 2.2 * scale;
-  ctx.strokeStyle = '#1e293b';
-  ctx.stroke();
+  ctx.lineWidth = 2.2 * scale; ctx.strokeStyle = '#1e293b'; ctx.stroke();
 
   const pPel = proj(c.pelvis);
   const drawCalyx = (cal, isPost, isSelectedTarget) => {
@@ -188,18 +163,7 @@ function drawFluoroBuffer(ctx, w, h) {
     const nw = (cal.neckW || 8) * scale;
     const cr = (cal.cupR || 7.5) * scale;
 
-    // Case 7: Calyceal Diverticulum has an obliterated neck—no retrograde contrast enters until punctured & injected antegrade!
-    if (cal.isDiverticulum && !state.hydro) {
-      ctx.beginPath();
-      ctx.moveTo(pPel.x, pPel.y);
-      ctx.lineTo(pCal.x, pCal.y);
-      ctx.lineWidth = 1.0 * scale;
-      ctx.setLineDash([3, 4]);
-      ctx.strokeStyle = 'rgba(71, 85, 105, 0.35)';
-      ctx.stroke();
-      ctx.setLineDash([]);
-      return;
-    }
+    if (cal.isDiverticulum && !state.hydro) return;
 
     ctx.beginPath();
     if (c.stoneType === 'bifid' && cal.y < 0) {
@@ -218,8 +182,9 @@ function drawFluoroBuffer(ctx, w, h) {
     ctx.save();
     ctx.translate(pCal.x, pCal.y);
     ctx.rotate(ang);
+    // Subtle physical dimpling of the calyceal contrast cup (NO orange/green color cheats!)
     const dimple = isSelectedTarget ? d.dimpleFactor : 0;
-    ctx.scale(1 - dimple * 0.22, 1 + dimple * 0.12);
+    ctx.scale(1 - dimple * 0.25, 1 + dimple * 0.14);
     ctx.beginPath();
     ctx.arc(0, 0, cr, -Math.PI * 0.78, Math.PI * 0.78);
     ctx.lineWidth = cr * 0.85;
@@ -227,23 +192,12 @@ function drawFluoroBuffer(ctx, w, h) {
     ctx.stroke();
     ctx.restore();
 
-    // 5mL Air Bolus floats ONLY to POSTERIOR calyces in a prone patient!
     if (state.airBolus && isPost) {
       ctx.beginPath();
       ctx.arc(pCal.x, pCal.y, cr * 0.68, 0, Math.PI * 2);
       ctx.fillStyle = 'rgba(248, 250, 252, 0.92)';
       ctx.fill();
-      ctx.lineWidth = 1.4;
-      ctx.strokeStyle = '#0284c7';
-      ctx.stroke();
-    }
-
-    if (isSelectedTarget) {
-      ctx.beginPath();
-      ctx.arc(pCal.x, pCal.y, cr + 2.5 * scale, 0, Math.PI * 2);
-      ctx.strokeStyle = dimple > 0.1 ? '#f59e0b' : 'rgba(2, 132, 199, 0.55)';
-      ctx.lineWidth = dimple > 0.1 ? 2.2 : 1.3;
-      ctx.stroke();
+      ctx.lineWidth = 1.2; ctx.strokeStyle = '#334155'; ctx.stroke();
     }
   };
 
@@ -257,16 +211,11 @@ function drawFluoroBuffer(ctx, w, h) {
     drawCalyx(c.calyces[k], true, k === state.targetKey);
   }
 
-  // Draw Pathology-Specific Stones (Branched Staghorns vs Isolated Calculi)
   const drawStone = (pt, r) => {
     const s = proj(pt);
-    ctx.beginPath();
-    ctx.arc(s.x, s.y, r * scale, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(10, 15, 24, 0.95)';
-    ctx.fill();
-    ctx.lineWidth = 1.3;
-    ctx.strokeStyle = '#94a3b8';
-    ctx.stroke();
+    ctx.beginPath(); ctx.arc(s.x, s.y, r * scale, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(10, 15, 24, 0.95)'; ctx.fill();
+    ctx.lineWidth = 1.2; ctx.strokeStyle = '#94a3b8'; ctx.stroke();
   };
 
   if (c.stoneType === 'staghorn' || c.stoneType === 'upper_staghorn') {
@@ -274,13 +223,8 @@ function drawFluoroBuffer(ctx, w, h) {
     keys.forEach(k => {
       if (!c.calyces[k]) return;
       const pC = proj(c.calyces[k]);
-      ctx.beginPath();
-      ctx.moveTo(pPel.x, pPel.y);
-      ctx.lineTo(pC.x, pC.y);
-      ctx.lineWidth = 7.2 * scale;
-      ctx.strokeStyle = 'rgba(10, 15, 24, 0.94)';
-      ctx.lineCap = 'round';
-      ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(pPel.x, pPel.y); ctx.lineTo(pC.x, pC.y);
+      ctx.lineWidth = 7.2 * scale; ctx.strokeStyle = 'rgba(10, 15, 24, 0.94)'; ctx.lineCap = 'round'; ctx.stroke();
       drawStone(c.calyces[k], 5.8);
     });
     drawStone(c.pelvis, 9.5);
@@ -298,89 +242,72 @@ function drawFluoroBuffer(ctx, w, h) {
     g.addColorStop(0.6, 'rgba(30, 41, 59, 0.65)');
     g.addColorStop(1, 'rgba(30, 41, 59, 0)');
     ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.arc(pb.x, pb.y, bl.r * scale, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.beginPath(); ctx.arc(pb.x, pb.y, bl.r * scale, 0, Math.PI * 2); ctx.fill();
   });
 
   const ng = getNeedle3D();
-  const pTip = proj(ng.tip);
-  const pHub = proj(ng.hub);
-  const shaftLen = Math.hypot(pHub.x - pTip.x, pHub.y - pTip.y);
+  const pTip = proj(ng.tip), pHub = proj(ng.hub);
 
-  ctx.beginPath();
-  ctx.moveTo(pHub.x, pHub.y);
-  ctx.lineTo(pTip.x, pTip.y);
-  ctx.lineWidth = 2.3 * scale;
-  ctx.strokeStyle = '#090d14';
-  ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(pHub.x, pHub.y); ctx.lineTo(pTip.x, pTip.y);
+  ctx.lineWidth = 2.3 * scale; ctx.strokeStyle = '#090d14'; ctx.stroke();
 
-  const isCoaxial = shaftLen < 6.5 * scale;
-  ctx.beginPath();
-  ctx.arc(pHub.x, pHub.y, 5.5 * scale, 0, Math.PI * 2);
-  ctx.lineWidth = 2.2 * scale;
-  ctx.strokeStyle = isCoaxial ? '#0284c7' : '#0f172a';
-  ctx.stroke();
+  ctx.beginPath(); ctx.arc(pHub.x, pHub.y, 5.5 * scale, 0, Math.PI * 2);
+  ctx.lineWidth = 2.2 * scale; ctx.strokeStyle = '#0f172a'; ctx.stroke();
 
   ctx.restore();
 }
 
-function drawFluoroHUD(ctx, w, h) {
-  const cx = w / 2, cy = h * 0.48, rad = Math.min(w, h) * 0.44;
+function drawFluoroHUD(ctx, w, h, isLive) {
   ctx.save();
-  ctx.font = `bold ${Math.max(10.5, Math.round(rad * 0.05))}px monospace`;
-  const d = computeDiagnostics();
-  if (d.dimpleFactor > 0.15 && !d.inTarget) {
-    ctx.fillStyle = '#d97706';
-    ctx.fillText('◐ CALYCEAL DIMPLE SIGN (CAPSULE TENTING) — PUSH +4MM TO POP!', cx - rad * 0.80, cy + rad * 0.84);
-  } else if (d.coaxialErr < 7.5) {
-    ctx.fillStyle = '#0369a1';
-    ctx.fillText('◎ BULL\'S EYE COAXIAL LOCK (<8mm)', cx - rad * 0.55, cy + rad * 0.84);
+  if (!isLive) {
+    ctx.fillStyle = 'rgba(15, 23, 42, 0.82)';
+    ctx.strokeStyle = '#f59e0b';
+    ctx.lineWidth = 1.2;
+    ctx.fillRect(12, 12, 230, 24);
+    ctx.strokeRect(12, 12, 230, 24);
+    ctx.fillStyle = '#fde047';
+    ctx.font = 'bold 10.5px monospace';
+    ctx.fillText('⏸ LAST IMAGE HOLD (PRESS SPACE)', 20, 28);
+  } else {
+    ctx.fillStyle = 'rgba(185, 28, 28, 0.85)';
+    ctx.fillRect(12, 12, 135, 22);
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 10.5px monospace';
+    ctx.fillText('☢ LIVE X-RAY ON', 20, 27);
   }
   ctx.restore();
 }
 
 // ----------------------------------------------------------------------------
-// 2. FLANK SKIN LANDMARK MAP
+// 2. PRONE FLANK MAP
 // ----------------------------------------------------------------------------
 function drawSkinSurface(ctx, w, h) {
   ctx.save();
   ctx.clearRect(0, 0, w, h);
-  ctx.fillStyle = '#1b1817';
-  ctx.fillRect(0, 0, w, h);
+  ctx.fillStyle = '#1b1817'; ctx.fillRect(0, 0, w, h);
 
   const scale = w / 180, ox = 20 * scale, oy = h * 0.52;
   const toSkin = (x, y) => ({ x: ox + x * scale, y: oy - y * scale });
-
   const c = getLiveAnatomy(), ng = getNeedle3D(), dyResp = getRespShift();
 
   const pPara = toSkin(55, 0);
-  ctx.fillStyle = 'rgba(245, 158, 11, 0.08)';
-  ctx.fillRect(0, 0, pPara.x, h);
-  ctx.beginPath(); ctx.moveTo(pPara.x, 0); ctx.lineTo(pPara.x, h);
-  ctx.strokeStyle = '#f59e0b'; ctx.stroke();
+  ctx.fillStyle = 'rgba(245, 158, 11, 0.08)'; ctx.fillRect(0, 0, pPara.x, h);
+  ctx.beginPath(); ctx.moveTo(pPara.x, 0); ctx.lineTo(pPara.x, h); ctx.strokeStyle = '#f59e0b'; ctx.stroke();
 
-  // Case 8 (Retrorenal Colon) shifts the red colon hazard line medially to x = 104mm!
   const colonX = c.stoneType === 'retrorenal_colon' ? 104 : 128;
   const pPAL = toSkin(colonX, 0);
-  ctx.fillStyle = 'rgba(239, 68, 68, 0.16)';
-  ctx.fillRect(pPAL.x, 0, w - pPAL.x, h);
-  ctx.beginPath(); ctx.moveTo(pPAL.x, 0); ctx.lineTo(pPAL.x, h);
-  ctx.strokeStyle = '#ef4444'; ctx.stroke();
+  ctx.fillStyle = 'rgba(239, 68, 68, 0.16)'; ctx.fillRect(pPAL.x, 0, w - pPAL.x, h);
+  ctx.beginPath(); ctx.moveTo(pPAL.x, 0); ctx.lineTo(pPAL.x, h); ctx.strokeStyle = '#ef4444'; ctx.stroke();
   if (c.stoneType === 'retrorenal_colon') {
-    ctx.fillStyle = '#f87171';
-    ctx.font = 'bold 9.5px sans-serif';
+    ctx.fillStyle = '#f87171'; ctx.font = 'bold 9.5px sans-serif';
     ctx.fillText('RETRORENAL COLON!', pPAL.x + 4, 14);
   }
 
   const drawSkinRib = (ry, label) => {
     const r1 = toSkin(35, ry + 12), r2 = toSkin(118, ry - 5);
     ctx.beginPath(); ctx.moveTo(r1.x, r1.y); ctx.lineTo(r2.x, r2.y);
-    ctx.lineWidth = 6.5 * scale;
-    ctx.strokeStyle = 'rgba(148, 163, 184, 0.30)';
-    ctx.lineCap = 'round'; ctx.stroke();
-    ctx.fillStyle = 'rgba(203, 213, 225, 0.55)';
-    ctx.font = `${Math.max(8.5, Math.round(scale * 3.0))}px sans-serif`;
+    ctx.lineWidth = 6.5 * scale; ctx.strokeStyle = 'rgba(148, 163, 184, 0.30)'; ctx.lineCap = 'round'; ctx.stroke();
+    ctx.fillStyle = 'rgba(203, 213, 225, 0.55)'; ctx.font = `${Math.max(8.5, Math.round(scale * 3.0))}px sans-serif`;
     ctx.fillText(label, r1.x + 2 * scale, r1.y - 5 * scale);
   };
   drawSkinRib(c.rib12Y, '12th Rib');
@@ -392,10 +319,8 @@ function drawSkinSurface(ctx, w, h) {
     const cal = rawCalyces[k];
     const pC = toSkin(cal.x, cal.y + dyResp);
     const isSel = k === state.targetKey;
-    ctx.beginPath();
-    ctx.arc(pC.x, pC.y, (isSel ? 5.2 : 3.6) * scale, 0, Math.PI * 2);
-    ctx.fillStyle = isSel ? '#38bdf8' : '#64748b';
-    ctx.fill();
+    ctx.beginPath(); ctx.arc(pC.x, pC.y, (isSel ? 5.2 : 3.6) * scale, 0, Math.PI * 2);
+    ctx.fillStyle = isSel ? '#38bdf8' : '#64748b'; ctx.fill();
     if (isSel) {
       ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5; ctx.stroke();
       ctx.fillStyle = '#7dd3fc';
@@ -407,16 +332,14 @@ function drawSkinSurface(ctx, w, h) {
   const pIn = toSkin(ng.pointA.x - 24 * Math.cos(radInf), ng.pointA.y + 24 * Math.sin(radInf));
   const pOut = toSkin(ng.pointA.x + 68 * Math.cos(radInf), ng.pointA.y - 68 * Math.sin(radInf));
   ctx.beginPath(); ctx.moveTo(pIn.x, pIn.y); ctx.lineTo(pOut.x, pOut.y);
-  ctx.strokeStyle = 'rgba(56, 189, 248, 0.65)';
-  ctx.lineWidth = 1.8; ctx.setLineDash([5, 4]); ctx.stroke(); ctx.setLineDash([]);
+  ctx.strokeStyle = 'rgba(56, 189, 248, 0.65)'; ctx.lineWidth = 1.8; ctx.setLineDash([5, 4]); ctx.stroke(); ctx.setLineDash([]);
 
   const pB = toSkin(ng.skinEntry.x, ng.skinEntry.y);
   const pTip = toSkin(ng.tip.x, ng.tip.y);
   ctx.beginPath(); ctx.moveTo(pB.x, pB.y); ctx.lineTo(pTip.x, pTip.y);
-  ctx.strokeStyle = '#22c55e'; ctx.lineWidth = 2.8; ctx.stroke();
+  ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 2.6; ctx.stroke();
 
-  ctx.beginPath();
-  ctx.arc(pB.x, pB.y, 6 * scale, 0, Math.PI * 2);
+  ctx.beginPath(); ctx.arc(pB.x, pB.y, 6 * scale, 0, Math.PI * 2);
   ctx.fillStyle = '#f59e0b'; ctx.fill();
   ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.8; ctx.stroke();
   ctx.fillStyle = '#fde047';
@@ -426,25 +349,34 @@ function drawSkinSurface(ctx, w, h) {
 }
 
 // ----------------------------------------------------------------------------
-// 3A. WORKBENCH TAB 1: AXIAL & CORONAL ANATOMY + DOG-LEG
+// 3A. WORKBENCH TAB 1: CLEAN SPLIT AXIAL CT (62%) & CORONAL DOG-LEG (38%)
 // ----------------------------------------------------------------------------
 function drawAnatomyBench(ctx, w, h) {
   ctx.save();
   ctx.clearRect(0, 0, w, h);
+  ctx.fillStyle = '#060a10';
+  ctx.fillRect(0, 0, w, h);
 
   if (state.blindMode && !state.blindRevealed) {
-    ctx.fillStyle = '#070b12'; ctx.fillRect(0, 0, w, h);
-    ctx.fillStyle = '#38bdf8'; ctx.font = 'bold 13px sans-serif'; ctx.textAlign = 'center';
-    ctx.fillText('OR BLIND MODE — PULL STYLET TO REVEAL ANATOMY', w / 2, h / 2);
+    ctx.fillStyle = '#38bdf8'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText('BLIND CT MODE — PULL STYLET TO REVEAL CROSS-SECTION', w / 2, h / 2);
     ctx.restore(); return;
   }
 
   const c = getLiveAnatomy(), ng = getNeedle3D(), d = computeDiagnostics();
-  const scale = Math.min(w / 175, h / 145), ox = 14 * scale, oy = 16 * scale;
+  const splitX = Math.floor(w * 0.63);
+
+  // LEFT PANEL (63%): AXIAL CT CROSS-SECTION (NO OVERLAP!)
+  const maxZ = Math.max(115, c.pelvis.z + 25);
+  const scaleX = (splitX - 24) / 148;
+  const scaleZ = (h - 28) / maxZ;
+  const scale = Math.min(scaleX, scaleZ);
+  const ox = 16, oy = 18;
   const toAx = (x, z) => ({ x: ox + x * scale, y: oy + z * scale });
 
-  const pS1 = toAx(0, 0), pS2 = toAx(152, 26);
-  ctx.fillStyle = 'rgba(234, 179, 8, 0.11)';
+  // Subcutaneous Fat & Lumbodorsal Fascia
+  const pS1 = toAx(0, 0), pS2 = toAx(142, 26);
+  ctx.fillStyle = 'rgba(234, 179, 8, 0.09)';
   ctx.fillRect(pS1.x, pS1.y, pS2.x - pS1.x, pS2.y - pS1.y);
   ctx.beginPath(); ctx.moveTo(pS1.x, pS1.y); ctx.lineTo(pS2.x, pS1.y);
   ctx.strokeStyle = '#f59e0b'; ctx.lineWidth = 2; ctx.stroke();
@@ -452,85 +384,116 @@ function drawAnatomyBench(ctx, w, h) {
   ctx.beginPath(); ctx.moveTo(pS1.x, pS2.y); ctx.lineTo(pS2.x, pS2.y);
   ctx.strokeStyle = '#38bdf8'; ctx.setLineDash([4, 3]); ctx.stroke(); ctx.setLineDash([]);
 
-  ctx.fillStyle = '#94a3b8';
-  ctx.font = `${Math.max(8.5, Math.round(scale * 2.9))}px sans-serif`;
-  ctx.fillText('Skin Surface (0mm)', pS1.x + 4, pS1.y + 10 * scale);
-  ctx.fillText('Lumbodorsal Fascia [1st Pop ~26mm]', pS1.x + 4, pS2.y - 3 * scale);
+  ctx.fillStyle = '#94a3b8'; ctx.font = `${Math.max(8.5, Math.round(scale * 3.1))}px sans-serif`;
+  ctx.fillText('Posterior Skin (0mm)', pS1.x + 4, pS1.y + 11);
+  ctx.fillText('Lumbodorsal Fascia (26mm)', pS1.x + 4, pS2.y - 4);
 
-  const pCol = toAx(c.stoneType === 'retrorenal_colon' ? 105 : 138, c.stoneType === 'retrorenal_colon' ? 38 : 56);
-  ctx.beginPath(); ctx.arc(pCol.x, pCol.y, 13 * scale, 0, Math.PI * 2);
+  // Spine & Erector Spinae / Psoas Muscle
+  const pVert = toAx(18, 65), pErec = toAx(34, 38);
+  ctx.fillStyle = 'rgba(148, 163, 184, 0.25)';
+  ctx.beginPath(); ctx.arc(pVert.x, pVert.y, 14 * scale, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = 'rgba(185, 28, 28, 0.22)';
+  ctx.beginPath(); ctx.ellipse(pErec.x, pErec.y, 16 * scale, 11 * scale, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#64748b'; ctx.fillText('Spine/Psoas', pVert.x - 12 * scale, pVert.y + 4);
+
+  // Retroperitoneal / Retrorenal Colon (Clearly visible, never covered by inset!)
+  const isRetro = c.stoneType === 'retrorenal_colon';
+  const pCol = toAx(isRetro ? 105 : 132, isRetro ? 38 : 56);
+  ctx.beginPath(); ctx.arc(pCol.x, pCol.y, 12.5 * scale, 0, Math.PI * 2);
   ctx.fillStyle = 'rgba(239, 68, 68, 0.28)'; ctx.fill();
-  ctx.strokeStyle = '#ef4444'; ctx.stroke();
-  ctx.fillStyle = '#fca5a5'; ctx.fillText('Colon', pCol.x - 10 * scale, pCol.y + 3 * scale);
+  ctx.lineWidth = 1.5; ctx.strokeStyle = '#ef4444'; ctx.stroke();
+  ctx.fillStyle = '#fca5a5';
+  ctx.font = `bold ${Math.max(8.5, Math.round(scale * 3.0))}px sans-serif`;
+  ctx.fillText(isRetro ? 'RETRORENAL COLON' : 'Colon', pCol.x - (isRetro ? 28 : 12) * scale, pCol.y - 14 * scale);
 
+  // Kidney Parenchyma Outline
   const pKid = toAx(76, c.pelvis.z - 4);
   ctx.save();
   ctx.translate(pKid.x, pKid.y);
   ctx.rotate((c.stoneType === 'horseshoe' ? -14 : -28) * Math.PI / 180);
-  ctx.beginPath(); ctx.ellipse(0, 0, 32 * scale, 22 * scale, 0, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(153, 27, 27, 0.45)'; ctx.fill();
-  ctx.strokeStyle = '#f87171'; ctx.stroke();
+  ctx.beginPath(); ctx.ellipse(0, 0, 31 * scale, 21 * scale, 0, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(153, 27, 27, 0.42)'; ctx.fill();
+  ctx.lineWidth = 1.5; ctx.strokeStyle = '#f87171'; ctx.stroke();
   ctx.restore();
 
   const pPel = toAx(c.pelvis.x, c.pelvis.z);
   const pPost = toAx(c.targetCalyx.x, c.targetCalyx.z);
   const pAnt = toAx(c.antCalyx.x, c.antCalyx.z);
 
+  // Brödel's Avascular Plane Line
   ctx.beginPath();
   ctx.moveTo(pPel.x, pPel.y);
-  ctx.lineTo(pPost.x + (pPost.x - pPel.x) * 2.3, pPost.y + (pPost.y - pPel.y) * 2.3);
-  ctx.strokeStyle = 'rgba(34, 197, 94, 0.5)';
-  ctx.lineWidth = 2; ctx.setLineDash([5, 4]); ctx.stroke(); ctx.setLineDash([]);
+  ctx.lineTo(pPost.x + (pPost.x - pPel.x) * 2.2, pPost.y + (pPost.y - pPel.y) * 2.2);
+  ctx.strokeStyle = 'rgba(56, 189, 248, 0.35)';
+  ctx.lineWidth = 1.5; ctx.setLineDash([4, 4]); ctx.stroke(); ctx.setLineDash([]);
 
+  // Infundibula & Calyceal Cups (NO Green-Light Cheat!)
   ctx.beginPath();
   ctx.moveTo(pPel.x, pPel.y); ctx.lineTo(pPost.x, pPost.y);
   ctx.moveTo(pPel.x, pPel.y); ctx.lineTo(pAnt.x, pAnt.y);
-  ctx.lineWidth = c.targetCalyx.neckW * scale;
-  ctx.strokeStyle = '#38bdf8'; ctx.lineCap = 'round'; ctx.stroke();
+  ctx.lineWidth = Math.max(3, c.targetCalyx.neckW * 0.75 * scale);
+  ctx.strokeStyle = '#0284c7'; ctx.lineCap = 'round'; ctx.stroke();
 
-  ctx.beginPath();
-  ctx.arc(pPost.x, pPost.y, c.targetCalyx.cupR * scale, 0, Math.PI * 2);
-  ctx.fillStyle = d.inTarget ? '#22c55e' : '#0284c7';
-  ctx.fill();
+  ctx.beginPath(); ctx.arc(pPel.x, pPel.y, 7 * scale, 0, Math.PI * 2);
+  ctx.fillStyle = '#0369a1'; ctx.fill();
 
+  ctx.beginPath(); ctx.arc(pPost.x, pPost.y, c.targetCalyx.cupR * scale, 0, Math.PI * 2);
+  ctx.fillStyle = '#0284c7'; ctx.fill();
+  ctx.lineWidth = 1.5; ctx.strokeStyle = '#7dd3fc'; ctx.stroke();
+
+  // Planned Needle Vector (Dashed) + Live Needle Shaft
   const pEntry = toAx(ng.skinEntry.x, ng.skinEntry.z);
+  const pProjEnd = toAx(ng.skinEntry.x + ng.dir.x * 115, ng.skinEntry.z + ng.dir.z * 115);
+  ctx.beginPath(); ctx.moveTo(pEntry.x, pEntry.y); ctx.lineTo(pProjEnd.x, pProjEnd.y);
+  ctx.strokeStyle = 'rgba(250, 204, 21, 0.28)'; ctx.lineWidth = 1.4; ctx.setLineDash([3, 3]); ctx.stroke(); ctx.setLineDash([]);
+
   const pTip = toAx(ng.tip.x, ng.tip.z);
   ctx.beginPath(); ctx.moveTo(pEntry.x, pEntry.y); ctx.lineTo(pTip.x, pTip.y);
-  ctx.lineWidth = 3.0;
-  ctx.strokeStyle = d.isSagging ? '#ef4444' : (d.inTarget ? '#4ade80' : '#facc15');
-  ctx.stroke();
+  ctx.lineWidth = 2.8; ctx.strokeStyle = '#facc15'; ctx.stroke();
 
-  const inW = 104 * scale, inH = h - 20 * scale, inX = w - inW - 8 * scale, inY = 10 * scale;
-  ctx.fillStyle = 'rgba(10, 16, 26, 0.94)';
-  ctx.strokeStyle = '#2a3c58';
-  ctx.fillRect(inX, inY, inW, inH); ctx.strokeRect(inX, inY, inW, inH);
+  ctx.beginPath(); ctx.arc(pEntry.x, pEntry.y, 4, 0, Math.PI * 2);
+  ctx.fillStyle = '#f59e0b'; ctx.fill();
 
-  ctx.fillStyle = '#38bdf8';
-  ctx.font = `bold ${Math.max(9, Math.round(scale * 3.2))}px sans-serif`;
-  ctx.fillText('CORONAL DOG-LEG', inX + 6 * scale, inY + 13 * scale);
+  // RIGHT PANEL (37%): DEDICATED CORONAL DOG-LEG PROTRACTOR
+  ctx.fillStyle = '#09101b';
+  ctx.fillRect(splitX, 0, w - splitX, h);
+  ctx.beginPath(); ctx.moveTo(splitX, 0); ctx.lineTo(splitX, h);
+  ctx.strokeStyle = '#1e2d42'; ctx.lineWidth = 1.5; ctx.stroke();
 
-  const icx = inX + inW * 0.46, icy = inY + inH * 0.54;
-  const infRad = c.targetCalyx.coronalDeg * Math.PI / 180, needRad = ng.effCor * Math.PI / 180;
+  const rcx = splitX + (w - splitX) * 0.45;
+  const rcy = h * 0.54;
+  const rScale = Math.min((w - splitX) / 95, h / 110);
 
+  ctx.fillStyle = '#38bdf8'; ctx.font = 'bold 10.5px sans-serif';
+  ctx.fillText('CORONAL DOG-LEG ANGLE', splitX + 10, 18);
+  ctx.fillStyle = '#94a3b8'; ctx.font = '9.5px sans-serif';
+  ctx.fillText('Infundibulum vs. Needle Axis', splitX + 10, 31);
+
+  const infRad = c.targetCalyx.coronalDeg * Math.PI / 180;
+  const needRad = ng.effCor * Math.PI / 180;
+
+  // Infundibular Axis
   ctx.beginPath();
-  ctx.moveTo(icx - Math.cos(infRad) * 26 * scale, icy - Math.sin(infRad) * 26 * scale);
-  ctx.lineTo(icx, icy);
-  ctx.lineWidth = 7 * scale; ctx.strokeStyle = 'rgba(56, 189, 248, 0.45)'; ctx.lineCap = 'round'; ctx.stroke();
+  ctx.moveTo(rcx - Math.cos(infRad) * 28 * rScale, rcy - Math.sin(infRad) * 28 * rScale);
+  ctx.lineTo(rcx + Math.cos(infRad) * 28 * rScale, rcy + Math.sin(infRad) * 28 * rScale);
+  ctx.lineWidth = 8 * rScale; ctx.strokeStyle = 'rgba(56, 189, 248, 0.32)'; ctx.lineCap = 'round'; ctx.stroke();
 
+  // Needle Coronal Vector
   ctx.beginPath();
-  ctx.moveTo(icx + Math.cos(needRad) * 32 * scale, icy + Math.sin(needRad) * 32 * scale);
-  ctx.lineTo(icx, icy);
-  ctx.lineWidth = 2.6; ctx.strokeStyle = d.dogLegDeg <= 20 ? '#22c55e' : '#ef4444'; ctx.stroke();
+  ctx.moveTo(rcx + Math.cos(needRad) * 34 * rScale, rcy + Math.sin(needRad) * 34 * rScale);
+  ctx.lineTo(rcx, rcy);
+  ctx.lineWidth = 2.6; ctx.strokeStyle = '#facc15'; ctx.stroke();
 
-  ctx.fillStyle = d.dogLegDeg <= 20 ? '#4ade80' : '#f87171';
-  ctx.font = `bold ${Math.max(10, Math.round(scale * 3.8))}px monospace`;
-  ctx.fillText(`Kink: ${d.dogLegDeg.toFixed(1)}°`, inX + 8 * scale, inY + inH - 8 * scale);
+  ctx.fillStyle = '#e2e8f0'; ctx.font = 'bold 11px monospace';
+  ctx.fillText(`3D Kink: ${d.dogLegDeg.toFixed(1)}°`, splitX + 10, h - 24);
+  ctx.fillStyle = '#94a3b8'; ctx.font = '9.5px monospace';
+  ctx.fillText(`Calyx: ${c.targetCalyx.coronalDeg}° | Aim: ${state.corDeg.toFixed(1)}°`, splitX + 10, h - 10);
 
   ctx.restore();
 }
 
 // ----------------------------------------------------------------------------
-// 3B. WORKBENCH TAB 2: LIVE TECHNIQUE IMPACT COMPARATOR
+// 3B. WORKBENCH TAB 2: TECHNIQUE IMPACT COMPARATOR
 // ----------------------------------------------------------------------------
 function drawTechniqueCompareBench(ctx, w, h) {
   ctx.save();
