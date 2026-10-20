@@ -1,10 +1,20 @@
 // ============================================================================
-// FILE: renderer.js — C-ARM COLONIC GAS, CLEAN AXIAL CT & NO-CHEAT RENDERER
+// FILE: renderer.js — v7.8 TRUE SALINE HYDRO-DISTENSION & C-ARM PATHOLOGY ENGINE
 // ============================================================================
 const _origGetLiveAnatomy = window.getLiveAnatomy;
 if (typeof _origGetLiveAnatomy === 'function') {
   window.getLiveAnatomy = function () {
     const live = _origGetLiveAnatomy();
+
+    // Enhance Saline Distension (Hydro): visibly balloons calyceal cups (+4.2mm total) & necks (+2.6mm)
+    if (state.hydro) {
+      Object.keys(live.calyces).forEach(k => {
+        live.calyces[k].cupR += 2.0; // Adds to physics.js +2.2mm = +4.2mm total ballooning!
+        live.calyces[k].neckW += 2.6;
+      });
+      live.targetCalyx = live.calyces[state.targetKey];
+    }
+
     // Case 10: Hypermobile kidney tents away if Saline Distend (hydro) is OFF
     if (state.caseIdx === 9 && state.depthMm > 45 && !state.hydro) {
       const ng = getNeedle3D();
@@ -62,7 +72,7 @@ function loop(now) {
 }
 
 // ----------------------------------------------------------------------------
-// 1. C-ARM FLUOROSCOPY (WITH RADIOLUCENT COLONIC GAS HAUSTRATION)
+// 1. C-ARM FLUOROSCOPY (WITH VISIBLE SALINE BALLOONING & COLONIC GAS)
 // ----------------------------------------------------------------------------
 function drawFluoroBuffer(ctx, w, h) {
   ctx.save();
@@ -99,8 +109,7 @@ function drawFluoroBuffer(ctx, w, h) {
     ctx.fillRect(vc.x + 14 * scale, tp.y - 3.5 * scale, 16 * scale, 7 * scale);
   }
 
-  // RADIOLUCENT COLONIC GAS BUBBLES (HAUSTRA) ON C-ARM FLUOROSCOPY
-  // In Case 8 (Retrorenal Colon), gas loop sits medially at x=102mm behind the kidney!
+  // Radiolucent Colonic Gas Bubbles (Haustra)
   const isRetroColon = c.stoneType === 'retrorenal_colon';
   const colX = isRetroColon ? 104 : 132;
   const colZ = isRetroColon ? 38 : 58;
@@ -134,7 +143,7 @@ function drawFluoroBuffer(ctx, w, h) {
   if (c.stoneType === 'horseshoe') {
     const isth1 = proj({ x: 12, y: -24, z: 82 });
     const isth2 = proj({ x: 66, y: -18, z: 76 });
-    ctx.beginPath(); ctx.moveTo(isth1.x, isth1.y); ctx.lineTo(isth2.x, isth2.y);
+    ctx.beginPath(); moveTo(isth1.x, isth1.y); ctx.lineTo(isth2.x, isth2.y);
     ctx.lineWidth = 22 * scale; ctx.strokeStyle = 'rgba(100, 116, 139, 0.28)'; ctx.lineCap = 'round'; ctx.stroke();
   }
 
@@ -155,7 +164,8 @@ function drawFluoroBuffer(ctx, w, h) {
   const u2 = proj(c.pelvis);
   ctx.beginPath(); ctx.moveTo(u1.x, u1.y);
   ctx.quadraticCurveTo(u1.x + (c.stoneType === 'horseshoe' ? 18 : 7) * scale, (u1.y + u2.y) / 2, u2.x, u2.y);
-  ctx.lineWidth = 2.2 * scale; ctx.strokeStyle = '#1e293b'; ctx.stroke();
+  ctx.lineWidth = (state.hydro ? 3.2 : 2.2) * scale;
+  ctx.strokeStyle = '#1e293b'; ctx.stroke();
 
   const pPel = proj(c.pelvis);
   const drawCalyx = (cal, isPost, isSelectedTarget) => {
@@ -174,7 +184,9 @@ function drawFluoroBuffer(ctx, w, h) {
     }
     ctx.lineTo(pCal.x, pCal.y);
     ctx.lineWidth = nw;
-    ctx.strokeStyle = isPost ? 'rgba(24, 34, 50, 0.82)' : 'rgba(55, 68, 86, 0.52)';
+    ctx.strokeStyle = isPost
+      ? (state.hydro ? 'rgba(15, 23, 42, 0.92)' : 'rgba(30, 41, 59, 0.78)')
+      : 'rgba(55, 68, 86, 0.50)';
     ctx.lineCap = 'round';
     ctx.stroke();
 
@@ -182,13 +194,24 @@ function drawFluoroBuffer(ctx, w, h) {
     ctx.save();
     ctx.translate(pCal.x, pCal.y);
     ctx.rotate(ang);
-    // Subtle physical dimpling of the calyceal contrast cup (NO orange/green color cheats!)
     const dimple = isSelectedTarget ? d.dimpleFactor : 0;
     ctx.scale(1 - dimple * 0.25, 1 + dimple * 0.14);
+
+    // If Saline Distend (hydro) is ON, draw the ballooned calyceal lumen & distended forniceal horns!
+    if (state.hydro && isPost) {
+      ctx.beginPath();
+      ctx.arc(0, 0, cr * 1.05, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(30, 41, 59, 0.85)';
+      ctx.fill();
+      ctx.lineWidth = 1.6 * scale;
+      ctx.strokeStyle = 'rgba(15, 23, 42, 0.96)';
+      ctx.stroke();
+    }
+
     ctx.beginPath();
-    ctx.arc(0, 0, cr, -Math.PI * 0.78, Math.PI * 0.78);
-    ctx.lineWidth = cr * 0.85;
-    ctx.strokeStyle = isPost ? 'rgba(18, 26, 40, 0.90)' : 'rgba(51, 65, 85, 0.55)';
+    ctx.arc(0, 0, cr, -Math.PI * 0.80, Math.PI * 0.80);
+    ctx.lineWidth = cr * (state.hydro ? 0.95 : 0.82);
+    ctx.strokeStyle = isPost ? 'rgba(15, 23, 42, 0.92)' : 'rgba(51, 65, 85, 0.55)';
     ctx.stroke();
     ctx.restore();
 
@@ -201,9 +224,11 @@ function drawFluoroBuffer(ctx, w, h) {
     }
   };
 
+  // Renal Pelvis (visibly balloons by +3.5mm when Saline Distend is active!)
+  const pelRadius = ((c.stoneType === 'bifid' ? 8.5 : 11.5) + (state.hydro ? 3.5 : 0)) * scale;
   ctx.beginPath();
-  ctx.arc(pPel.x, pPel.y, (c.stoneType === 'bifid' ? 8.5 : 11.5) * scale, 0, Math.PI * 2);
-  ctx.fillStyle = 'rgba(22, 32, 48, 0.86)';
+  ctx.arc(pPel.x, pPel.y, pelRadius, 0, Math.PI * 2);
+  ctx.fillStyle = state.hydro ? 'rgba(15, 23, 42, 0.92)' : 'rgba(24, 34, 50, 0.82)';
   ctx.fill();
 
   drawCalyx(c.antCalyx, false, false);
@@ -214,8 +239,10 @@ function drawFluoroBuffer(ctx, w, h) {
   const drawStone = (pt, r) => {
     const s = proj(pt);
     ctx.beginPath(); ctx.arc(s.x, s.y, r * scale, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(10, 15, 24, 0.95)'; ctx.fill();
-    ctx.lineWidth = 1.2; ctx.strokeStyle = '#94a3b8'; ctx.stroke();
+    ctx.fillStyle = 'rgba(8, 12, 20, 0.96)'; ctx.fill();
+    ctx.lineWidth = (state.hydro ? 1.8 : 1.2);
+    ctx.strokeStyle = state.hydro ? '#cbd5e1' : '#94a3b8';
+    ctx.stroke();
   };
 
   if (c.stoneType === 'staghorn' || c.stoneType === 'upper_staghorn') {
@@ -224,15 +251,15 @@ function drawFluoroBuffer(ctx, w, h) {
       if (!c.calyces[k]) return;
       const pC = proj(c.calyces[k]);
       ctx.beginPath(); ctx.moveTo(pPel.x, pPel.y); ctx.lineTo(pC.x, pC.y);
-      ctx.lineWidth = 7.2 * scale; ctx.strokeStyle = 'rgba(10, 15, 24, 0.94)'; ctx.lineCap = 'round'; ctx.stroke();
-      drawStone(c.calyces[k], 5.8);
+      ctx.lineWidth = 6.8 * scale; ctx.strokeStyle = 'rgba(10, 15, 24, 0.95)'; ctx.lineCap = 'round'; ctx.stroke();
+      drawStone(c.calyces[k], 5.6);
     });
-    drawStone(c.pelvis, 9.5);
+    drawStone(c.pelvis, 9.2);
   } else if (c.stoneType === 'diverticulum') {
     drawStone(c.calyces.middle, 4.8);
   } else {
     drawStone(c.pelvis, 8.2);
-    drawStone(c.targetCalyx, 5.6);
+    drawStone(c.targetCalyx, 5.4);
   }
 
   state.blushClouds.forEach(bl => {
@@ -349,7 +376,7 @@ function drawSkinSurface(ctx, w, h) {
 }
 
 // ----------------------------------------------------------------------------
-// 3A. WORKBENCH TAB 1: CLEAN SPLIT AXIAL CT (62%) & CORONAL DOG-LEG (38%)
+// 3A. WORKBENCH TAB 1: CLEAN SPLIT AXIAL CT (63%) & CORONAL DOG-LEG (37%)
 // ----------------------------------------------------------------------------
 function drawAnatomyBench(ctx, w, h) {
   ctx.save();
@@ -357,16 +384,9 @@ function drawAnatomyBench(ctx, w, h) {
   ctx.fillStyle = '#060a10';
   ctx.fillRect(0, 0, w, h);
 
-  if (state.blindMode && !state.blindRevealed) {
-    ctx.fillStyle = '#38bdf8'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center';
-    ctx.fillText('BLIND CT MODE — PULL STYLET TO REVEAL CROSS-SECTION', w / 2, h / 2);
-    ctx.restore(); return;
-  }
-
   const c = getLiveAnatomy(), ng = getNeedle3D(), d = computeDiagnostics();
   const splitX = Math.floor(w * 0.63);
 
-  // LEFT PANEL (63%): AXIAL CT CROSS-SECTION (NO OVERLAP!)
   const maxZ = Math.max(115, c.pelvis.z + 25);
   const scaleX = (splitX - 24) / 148;
   const scaleZ = (h - 28) / maxZ;
@@ -374,7 +394,6 @@ function drawAnatomyBench(ctx, w, h) {
   const ox = 16, oy = 18;
   const toAx = (x, z) => ({ x: ox + x * scale, y: oy + z * scale });
 
-  // Subcutaneous Fat & Lumbodorsal Fascia
   const pS1 = toAx(0, 0), pS2 = toAx(142, 26);
   ctx.fillStyle = 'rgba(234, 179, 8, 0.09)';
   ctx.fillRect(pS1.x, pS1.y, pS2.x - pS1.x, pS2.y - pS1.y);
@@ -388,7 +407,6 @@ function drawAnatomyBench(ctx, w, h) {
   ctx.fillText('Posterior Skin (0mm)', pS1.x + 4, pS1.y + 11);
   ctx.fillText('Lumbodorsal Fascia (26mm)', pS1.x + 4, pS2.y - 4);
 
-  // Spine & Erector Spinae / Psoas Muscle
   const pVert = toAx(18, 65), pErec = toAx(34, 38);
   ctx.fillStyle = 'rgba(148, 163, 184, 0.25)';
   ctx.beginPath(); ctx.arc(pVert.x, pVert.y, 14 * scale, 0, Math.PI * 2); ctx.fill();
@@ -396,7 +414,6 @@ function drawAnatomyBench(ctx, w, h) {
   ctx.beginPath(); ctx.ellipse(pErec.x, pErec.y, 16 * scale, 11 * scale, 0, 0, Math.PI * 2); ctx.fill();
   ctx.fillStyle = '#64748b'; ctx.fillText('Spine/Psoas', pVert.x - 12 * scale, pVert.y + 4);
 
-  // Retroperitoneal / Retrorenal Colon (Clearly visible, never covered by inset!)
   const isRetro = c.stoneType === 'retrorenal_colon';
   const pCol = toAx(isRetro ? 105 : 132, isRetro ? 38 : 56);
   ctx.beginPath(); ctx.arc(pCol.x, pCol.y, 12.5 * scale, 0, Math.PI * 2);
@@ -406,7 +423,6 @@ function drawAnatomyBench(ctx, w, h) {
   ctx.font = `bold ${Math.max(8.5, Math.round(scale * 3.0))}px sans-serif`;
   ctx.fillText(isRetro ? 'RETRORENAL COLON' : 'Colon', pCol.x - (isRetro ? 28 : 12) * scale, pCol.y - 14 * scale);
 
-  // Kidney Parenchyma Outline
   const pKid = toAx(76, c.pelvis.z - 4);
   ctx.save();
   ctx.translate(pKid.x, pKid.y);
@@ -420,28 +436,25 @@ function drawAnatomyBench(ctx, w, h) {
   const pPost = toAx(c.targetCalyx.x, c.targetCalyx.z);
   const pAnt = toAx(c.antCalyx.x, c.antCalyx.z);
 
-  // Brödel's Avascular Plane Line
   ctx.beginPath();
   ctx.moveTo(pPel.x, pPel.y);
   ctx.lineTo(pPost.x + (pPost.x - pPel.x) * 2.2, pPost.y + (pPost.y - pPel.y) * 2.2);
   ctx.strokeStyle = 'rgba(56, 189, 248, 0.35)';
   ctx.lineWidth = 1.5; ctx.setLineDash([4, 4]); ctx.stroke(); ctx.setLineDash([]);
 
-  // Infundibula & Calyceal Cups (NO Green-Light Cheat!)
   ctx.beginPath();
   ctx.moveTo(pPel.x, pPel.y); ctx.lineTo(pPost.x, pPost.y);
   ctx.moveTo(pPel.x, pPel.y); ctx.lineTo(pAnt.x, pAnt.y);
   ctx.lineWidth = Math.max(3, c.targetCalyx.neckW * 0.75 * scale);
   ctx.strokeStyle = '#0284c7'; ctx.lineCap = 'round'; ctx.stroke();
 
-  ctx.beginPath(); ctx.arc(pPel.x, pPel.y, 7 * scale, 0, Math.PI * 2);
+  ctx.beginPath(); ctx.arc(pPel.x, pPel.y, (state.hydro ? 9.5 : 7) * scale, 0, Math.PI * 2);
   ctx.fillStyle = '#0369a1'; ctx.fill();
 
   ctx.beginPath(); ctx.arc(pPost.x, pPost.y, c.targetCalyx.cupR * scale, 0, Math.PI * 2);
   ctx.fillStyle = '#0284c7'; ctx.fill();
   ctx.lineWidth = 1.5; ctx.strokeStyle = '#7dd3fc'; ctx.stroke();
 
-  // Planned Needle Vector (Dashed) + Live Needle Shaft
   const pEntry = toAx(ng.skinEntry.x, ng.skinEntry.z);
   const pProjEnd = toAx(ng.skinEntry.x + ng.dir.x * 115, ng.skinEntry.z + ng.dir.z * 115);
   ctx.beginPath(); ctx.moveTo(pEntry.x, pEntry.y); ctx.lineTo(pProjEnd.x, pProjEnd.y);
@@ -454,7 +467,6 @@ function drawAnatomyBench(ctx, w, h) {
   ctx.beginPath(); ctx.arc(pEntry.x, pEntry.y, 4, 0, Math.PI * 2);
   ctx.fillStyle = '#f59e0b'; ctx.fill();
 
-  // RIGHT PANEL (37%): DEDICATED CORONAL DOG-LEG PROTRACTOR
   ctx.fillStyle = '#09101b';
   ctx.fillRect(splitX, 0, w - splitX, h);
   ctx.beginPath(); ctx.moveTo(splitX, 0); ctx.lineTo(splitX, h);
@@ -472,13 +484,11 @@ function drawAnatomyBench(ctx, w, h) {
   const infRad = c.targetCalyx.coronalDeg * Math.PI / 180;
   const needRad = ng.effCor * Math.PI / 180;
 
-  // Infundibular Axis
   ctx.beginPath();
   ctx.moveTo(rcx - Math.cos(infRad) * 28 * rScale, rcy - Math.sin(infRad) * 28 * rScale);
   ctx.lineTo(rcx + Math.cos(infRad) * 28 * rScale, rcy + Math.sin(infRad) * 28 * rScale);
   ctx.lineWidth = 8 * rScale; ctx.strokeStyle = 'rgba(56, 189, 248, 0.32)'; ctx.lineCap = 'round'; ctx.stroke();
 
-  // Needle Coronal Vector
   ctx.beginPath();
   ctx.moveTo(rcx + Math.cos(needRad) * 34 * rScale, rcy + Math.sin(needRad) * 34 * rScale);
   ctx.lineTo(rcx, rcy);
