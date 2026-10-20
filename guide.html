@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>The Definitive PCNL Puncture, Calyx Selection & Point B Surgical Manual</title>
+  <style>
+    :root {
+      --bg: #060a12;
+      --card: #0c1424;
+      --border: #1e2f4d;
+      --accent: #38bdf8;
+      --green: #4ade80;
+      --gold: #fde047;
+      --red: #f87171;
+      --text: #e2e8f0;
+      --muted: #94a3b8;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      line-height: 1.65;
+      font-size: 14.5px;
+      padding-bottom: 60px;
+    }
+    header {
+      background: #09101d;
+      border-bottom: 2px solid var(--accent);
+      padding: 22px 28px;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    .title-wrap h1 { font-size: 20px; color: var(--accent); font-weight: 900; letter-spacing: 0.3px; }
+    .title-wrap p { font-size: 12.5px; color: var(--muted); }
+    .nav-pills { display: flex; gap: 6px; flex-wrap: wrap; }
+    .nav-pills a {
+      background: #132038;
+      color: var(--text);
+      text-decoration: none;
+      padding: 6px 11px;
+      border-radius: 5px;
+      border: 1px solid #283e64;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .nav-pills a:hover { border-color: var(--accent); color: var(--accent); }
+    .container { max-width: 1120px; margin: 24px auto; padding: 0 20px; display: flex; flex-direction: column; gap: 26px; }
+    .sec-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 24px 28px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.45);
+    }
+    .sec-card h2 {
+      color: var(--accent);
+      font-size: 18px;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 8px;
+      margin-bottom: 16px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .sec-card h3 { color: var(--gold); font-size: 15.5px; margin: 16px 0 8px 0; }
+    p { margin-bottom: 10px; }
+    ul, ol { padding-left: 22px; margin-bottom: 12px; }
+    li { margin-bottom: 6px; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    @media (max-width: 850px) { .grid-2 { grid-template-columns: 1fr; } }
+    .callout {
+      background: rgba(56, 189, 248, 0.08);
+      border-left: 4px solid var(--accent);
+      padding: 12px 16px;
+      border-radius: 4px;
+      margin: 12px 0;
+    }
+    .callout-warn {
+      background: rgba(248, 113, 113, 0.1);
+      border-left: 4px solid var(--red);
+      padding: 12px 16px;
+      border-radius: 4px;
+      margin: 12px 0;
+    }
+    .callout-ok {
+      background: rgba(74, 222, 128, 0.09);
+      border-left: 4px solid var(--green);
+      padding: 12px 16px;
+      border-radius: 4px;
+      margin: 12px 0;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 14px 0;
+      font-size: 13.2px;
+      background: #080e1a;
+    }
+    th, td { border: 1px solid #1c2b45; padding: 9px 11px; text-align: left; vertical-align: top; }
+    th { background: #101c33; color: var(--accent); font-weight: 800; text-transform: uppercase; font-size: 11.5px; }
+    code, .math {
+      font-family: ui-monospace, SFMono-Regular, monospace;
+      background: #070c16;
+      color: var(--gold);
+      padding: 2px 6px;
+      border-radius: 4px;
+      border: 1px solid #1e2f4d;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="title-wrap">
+    <h1>📖 THE DEFINITIVE PCNL PUNCTURE &amp; ACCESS MANUAL</h1>
+    <p>Complete Biomechanical Guide to Calyx Selection, Point A / Point B Geometry, C-Arm Parallax &amp; Difficult Scenarios</p>
+  </div>
+  <nav class="nav-pills">
+    <a href="#sec1">1. Anatomy &amp; Brödel's Plane</a>
+    <a href="#sec2">2. Calyx Selection</a>
+    <a href="#sec3">3. Choosing Point A &amp; Point B</a>
+    <a href="#sec4">4. The 3 C-Arm Techniques</a>
+    <a href="#sec5">5. Supracostal vs. Subcostal</a>
+    <a href="#sec6">6. Haptics &amp; Troubleshooting</a>
+    <a href="#sec7">7. 10-Case Encyclopedia</a>
+  </nav>
+</header>
+
+<div class="container">
+
+  <!-- SECTION 1 -->
+  <section class="sec-card" id="sec1">
+    <h2>1. Intrarenal Vascular Anatomy &amp; Why We Only Puncture the Papilla</h2>
+    <p>
+      The kidney receives 20% of cardiac output. The main renal artery divides into <b>anterior</b> and <b>posterior segmental arteries</b>, which branch into <b>interlobar (infundibular) arteries</b> running directly alongside the calyceal infundibular necks, then curve over the medullary pyramids as <b>arcuate arteries</b>.
+    </p>
+    <div class="grid-2">
+      <div class="callout-ok">
+        <b>✓ The Transpapillary Rule (Brödel's Bloodless Line):</b><br>
+        Between the anterior and posterior vascular territories lies a posterolateral avascular watershed zone (<b>Brödel's Plane</b>), angled at roughly <span class="math">20°–35°</span> posterior to the frontal plane of the kidney. A needle that enters dead-center through the <b>fornix/tip of a posterior renal papilla</b> along the long axis of its infundibulum only traverses tiny peripheral end-capillaries, resulting in minimal bleeding and self-sealing tamponade around the sheath.
+      </div>
+      <div class="callout-warn">
+        <b>✗ The Infundibular Neck Trap (Venous/Arterial Hemorrhage):</b><br>
+        Never puncture directly into the <b>infundibular neck</b> or the renal pelvis! The interlobar arteries and large venous plexuses wrap tightly around the infundibular walls. Direct infundibular puncture lacerates these large-caliber vessels, causing immediate venous/arterial hemorrhage, arteriovenous fistulae, or pseudoaneurysms, and lacks parenchymal tissue to tamponade the tract.
+      </div>
+    </div>
+
+    <h3>Anterior vs. Posterior Calyces on the 0° AP Pyelogram</h3>
+    <p>
+      Because the kidney lies on the sloped psoas muscle, it is rotated ~30° internally. In a standard <b>Brödel-type kidney</b>, the <b>anterior calyces</b> point laterally (seen in side-profile on 0° AP), while the <b>posterior calyces</b> point posteromedially at <span class="math">~20°–35°</span> (seen more end-on as circular cups on 0° AP). In a <b>Hodson-type kidney</b>, the anterior calyces are more medial and the posterior calyces extend further laterally.
+    </p>
+    <table>
+      <thead>
+        <tr>
+          <th>Diagnostic Maneuver</th>
+          <th>Posterior Calyx (Correct Target)</th>
+          <th>Anterior Calyx (Hairpin Trap!)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><b>1. 5mL Air Bolus vs. Contrast (Prone Patient)</b></td>
+          <td><b>Air rises!</b> Because the patient is prone, the posterior calyces are non-dependent (ceiling). Injected air floats straight up into the <b>posterior calyces</b> as bright radiolucent bubbles.</td>
+          <td><b>Heavy iodinated contrast sinks!</b> Dense dark contrast pools downward by gravity into the dependent <b>anterior calyces</b>.</td>
+        </tr>
+        <tr>
+          <td><b>2. Rotating C-Arm 30° Ipsilateral (Toward Flank)</b></td>
+          <td>Rotates <b>end-on</b> into a circular target ("Bull's Eye" profile) and moves <b>medially</b> on the monitor as the C-arm rotates toward the ipsilateral side.</td>
+          <td>Elongates in side-profile and projects further <b>laterally</b>. Puncturing an anterior calyx forces a &gt;90° hairpin U-turn to enter the pelvis!</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- SECTION 2 -->
+  <section class="sec-card" id="sec2">
+    <h2>2. Strategic Calyx Selection: Which Posterior Calyx Should You Choose?</h2>
+    <p>
+      Before touching the needle, you must choose which posterior calyx (<b>Point A</b>) gives you the highest stone clearance with the lowest parenchymal torque. In every patient, evaluate three calyceal metrics:
+      <b>(1) Infundibular Width</b> (ideal <span class="math">&ge; 8 mm</span>; narrow <span class="math">&lt; 6 mm</span> risks tearing),
+      <b>(2) Coronal Infundibulopelvic Angle</b>, and
+      <b>(3) Rigid Nephroscope Reach (%)</b>.
+    </p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Posterior Calyx</th>
+          <th>Typical Anatomy (<span class="math">Axial / Coronal</span>)</th>
+          <th>When It Is the Gold Standard</th>
+          <th>When It Is a Surgical Trap</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><b>1. Lower-Lateral Posterior</b><br><span style="color:var(--green)">(Workhorse Subcostal Access)</span></td>
+          <td>Axial: <span class="math">26°–40°</span><br>Coronal: <span class="math">+20° to +35°</span><br>Neck: <span class="math">8–10 mm</span></td>
+          <td><b>Standard Pelvic &amp; Lower-Pole Stones (Cases 1, 5, 8, 10):</b> 100% subcostal (zero pleural risk), wide infundibulum, and gentle cephalomedial angle into the renal pelvis (88–92% reach).</td>
+          <td><b>Steep 52° Staghorn Neck (Case 2) or Bifid Pelvis (Case 9):</b> If the neck is &gt;45° and narrow (&lt;6 mm), a horizontal entry causes a severe dog-leg kink. In a bifid pelvis, it isolates you in the lower moiety (48% reach).</td>
+        </tr>
+        <tr>
+          <td><b>2. Lower-Medial (Sub-Apical)</b><br><span style="color:var(--red)">(The High-Torque Trap)</span></td>
+          <td>Axial: <span class="math">15°–24°</span><br>Coronal: <span class="math">+45° to +60°</span><br>Neck: <span class="math">5.0–6.5 mm</span></td>
+          <td><b>Almost Never Primary:</b> Only punctured if an isolated calculus is trapped specifically inside this sub-apical calyceal cup.</td>
+          <td><b>Why Beginners Fail Here:</b> It sits very medially (close to the erector spinae muscle and lumbar veins) and drains upward at a steep 48°–60° angle. Trying to pivot a rigid scope from here into the renal pelvis tears the narrow neck!</td>
+        </tr>
+        <tr>
+          <td><b>3. Middle Posterior</b><br><span style="color:var(--accent)">(Direct Pelvic Confluence)</span></td>
+          <td>Axial: <span class="math">26°–34°</span><br>Coronal: <span class="math">+2° to +10°</span><br>Neck: <span class="math">8–10 mm</span></td>
+          <td><b>Bifid / Duplex Pelvis (Case 9) &amp; Central Pelvic Stones:</b> Aims horizontally (<span class="math">~4°</span>) straight into the central pelvic junction, accessing both upper and lower moieties without supracostal risk!</td>
+          <td><b>Acute Lower-Pole Calyceal Stones:</b> Looking straight into the pelvis makes it hard to bend a rigid scope acutely downward into a dependent lower-pole calyx.</td>
+        </tr>
+        <tr>
+          <td><b>4. Upper-Pole Compound</b><br><span style="color:var(--gold)">(Long-Axis Staghorn Gateway)</span></td>
+          <td>Axial: <span class="math">18°–26°</span><br>Coronal: <span class="math">-8° to -16°</span> (Caudal!)<br>Neck: <span class="math">10–12 mm</span></td>
+          <td><b>Upper-Pole Staghorns, UPJ Stones &amp; Horseshoe Kidneys (Cases 2, 4, 6):</b> Drains caudally straight down the long axis of the kidney, pelvis, lower pole, and proximal ureter (95–98% reach, zero torque!). In Horseshoe Kidneys (Case 6), it is already <b>subcostal</b>!</td>
+          <td><b>Pleural &amp; Subcostal Vessel Hazard:</b> In normal kidneys (Cases 1–5), it sits above the 12th rib. Puncturing on inspiration or too high in the ICS risks hydrothorax or intercostal artery laceration.</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <!-- SECTION 3 -->
+  <section class="sec-card" id="sec3">
+    <h2>3. Exact 3D Geometry of Point A &amp; Point B (Skin Entry Selection)</h2>
+    <p>
+      The entire secret of PCNL puncture is understanding that <b>Point B (where you poke the skin)</b> is NOT chosen randomly—it is dictated mathematically by three numbers of your target calyx:
+      its <b>Depth (<span class="math">Z</span>)</b>, its <b>True Axial Angle (<span class="math">&theta;<sub>axial</sub></span>)</b>, and its <b>Coronal Infundibular Slope (<span class="math">&theta;<sub>coronal</sub></span>)</b>.
+    </p>
+
+    <div class="grid-2">
+      <div class="callout">
+        <h3>Step 1: Marking Point A &amp; The 0° Infundibular Line</h3>
+        <ol>
+          <li>Place the C-arm at <b>0° AP</b> (vertical beam).</li>
+          <li>Place a clamp tip over the center of the target posterior calyceal papilla and mark that spot on the skin as <b>Point A</b> (<span class="math">X<sub>calyx</sub>, Y<sub>calyx</sub></span>).</li>
+          <li>Draw a line on the skin extending laterally from Point A straight along the axis of the target infundibular neck (at angle <span class="math">&theta;<sub>coronal</sub></span>).</li>
+          <li><b>Crucial Rule:</b> For coaxial entry (zero dog-leg), <b>Point B MUST lie on this dashed infundibular line!</b></li>
+        </ol>
+      </div>
+
+      <div class="callout">
+        <h3>Step 2: Calculating Point B (<span class="math">L</span> and <span class="math">CC</span>) &amp; Pitch</h3>
+        <p>If the target papilla is at depth <span class="math">Z</span> (e.g., <span class="math">68 mm</span>) and points posteromedially at <span class="math">&theta;<sub>axial</sub> = 30°</span>:</p>
+        <ul>
+          <li><b>Total Surface Distance from Point A:</b><br><span class="math">D<sub>surface</sub> = Z &times; tan(&theta;<sub>axial</sub>)</span> &nbsp;(e.g., <span class="math">68 &times; tan(30°) = 39.2 mm &approx; 3.9 cm</span>)</li>
+          <li><b>Lateral Offset (<span class="math">L</span>):</b><br><span class="math">L = D<sub>surface</sub> &times; cos(&theta;<sub>coronal</sub>)</span> &nbsp;(typically <span class="math">2.5 to 4.5 cm</span> lateral to Point A)</li>
+          <li><b>Cephalocaudal Offset (<span class="math">CC</span>):</b><br><span class="math">CC = -L &times; tan(&theta;<sub>coronal</sub>)</span> &nbsp;(caudal <span class="math">-</span> if aiming cephalad; cranial <span class="math">+</span> if aiming caudal)</li>
+          <li><b>Ideal Needle Pitch (from Vertical):</b><br><span class="math">Pitch = atan2(&radic;(L&sup2; + CC&sup2;), Z)</span> &nbsp;(&approx; <span class="math">&theta;<sub>axial</sub></span> when coaxial!)</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3>The Anatomical Safety Boundaries for Point B</h3>
+    <ul>
+      <li><b>Medial Boundary (Paraspinal Limit — <span class="math">X &lt; 55 mm</span>):</b> Never place Point B within 5.5 cm of the midline spinous processes. Puncturing through the thick erector spinae muscle causes severe postoperative muscle spasm, deflects the 18G needle, and risks lacerating segmental lumbar arteries/veins.</li>
+      <li><b>Lateral Boundary (Posterior Axillary Line — <span class="math">X &gt; 126 mm</span>, or <span class="math">&gt; 104 mm</span> in Case 8):</b> Never place Point B anterior/lateral to the Posterior Axillary Line (PAL). As you move laterally past the PAL, the peritoneal reflection and ascending/descending <b>colon</b> lie directly in the needle path!</li>
+      <li><b>Effect of Patient Depth (<span class="math">Z</span>) on Lateral Offset (<span class="math">L</span>):</b>
+        <ul>
+          <li><b>Thin / Emaciated Patient (Case 8, <span class="math">Z = 48 mm</span>):</b> At 26° pitch, <span class="math">D<sub>surface</sub> = 48 &times; tan(26°) = 23 mm</span> (<span class="math">L &approx; 2.2 cm</span>). If you use a standard 4.0 cm offset in a thin patient, your trajectory becomes way too flat (40°+) and hits the lateral colon!</li>
+          <li><b>Morbid Obesity (Case 5, <span class="math">Z = 104 mm</span>):</b> At 40° pitch, <span class="math">D<sub>surface</sub> = 104 &times; tan(40°) = 87 mm</span> (<span class="math">L &approx; 7.5–8.0 cm</span>).</li>
+        </ul>
+      </li>
+    </ul>
+  </section>
+
+  <!-- SECTION 4 -->
+  <section class="sec-card" id="sec4">
+    <h2>4. Mastering the 3 Fluoroscopic Puncture Techniques &amp; Parallax</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Technique</th>
+          <th>How It Works Step-by-Step</th>
+          <th>Best Scenarios &amp; Fatal Flaws</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><b>1. Pure Bull's Eye (Eye-of-the-Needle)</b><br><span style="color:var(--muted)">(30° Ipsilateral Coaxial)</span></td>
+          <td>
+            1. Rotate C-arm <span class="math">+30° Ipsilateral</span> (and tilt if needed) so the target posterior calyx looks like a circle.<br>
+            2. Place needle tip over the center of the calyx and tilt the needle hub until the <b>hub ring sits directly over the tip (<span class="math">◎</span> single dot)</b>.<br>
+            3. Advance down the X-ray beam, then swing C-arm to <span class="math">0° AP</span> to judge final depth.
+          </td>
+          <td>
+            <b>Pros:</b> Very intuitive for beginners; shortest skin-to-calyx distance.<br>
+            <b>Fatal Flaw (The Roof-Entry Trap):</b> If you only rotate the C-arm axially (+30° Ax, 0° Tilt), your needle enters horizontally (<span class="math">CC = 0, Coronal = 0°</span>). On a steep lower calyx (like Case 2's 52° neck) or a rib-blocked calyx (Case 3), Pure Bull's Eye creates a massive <b>52° dog-leg kink</b> or hits the 12th rib!
+          </td>
+        </tr>
+        <tr>
+          <td><b>2. Classic Biplanar Triangulation</b><br><span style="color:var(--accent)">(0° AP + 30° Cephalad)</span></td>
+          <td>
+            1. <b>Plane 1 (<span class="math">0° AP</span>):</b> Place Point B on the infundibular line (<span class="math">L, CC</span>) and lock your <b>Coronal Aim</b> so the needle points straight down the neck.<br>
+            2. <b>Plane 2 (<span class="math">+30° Cephalad Tilt</span>):</b> Tilt the C-arm detector toward the head. This elongates the needle in side-profile so you can adjust <b>Needle Pitch</b> without moving left/right off Plane 1.<br>
+            3. Advance while checking both planes.
+          </td>
+          <td>
+            <b>Pros:</b> <b>Mandatory when the 12th rib blocks a direct coaxial view (Case 3)</b> or when the infundibular neck is very steep (Case 2). Ensures 0° coronal dog-leg!<br>
+            <b>Challenge:</b> Requires holding Plane 1 steady with your wrist while adjusting Plane 2 (Pitch).
+          </td>
+        </tr>
+        <tr>
+          <td><b>3. The Modern Hybrid Technique</b><br><span style="color:var(--green)">(0° Line + Oblique Bull's Eye + Ceph/AP Depth)</span></td>
+          <td>
+            1. On <b><span class="math">0° AP</span></b>, mark the infundibular axis line and place Point B along that line (<span class="math">L, CC</span>).<br>
+            2. Rotate C-arm to the <b>true compound coaxial angle</b> (<span class="math">+30° Axial</span> + appropriate tilt) to lock the <b>Bull's Eye dot (<span class="math">◎</span>)</b> and punch through the lumbodorsal fascia (~30 mm).<br>
+            3. Swing to <b><span class="math">+30° Ceph</span></b> or <b><span class="math">0° AP</span></b> to watch the calyceal dimple and pop into the papilla.
+          </td>
+          <td>
+            <b>Gold Standard:</b> Combines the zero-dog-leg anatomical alignment of Triangulation with the pinpoint coaxial accuracy of the Bull's Eye view!
+          </td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout">
+      <h3>How to Read C-Arm Parallax on the <span class="math">+30° Cephalad</span> View</h3>
+      <p>
+        Suppose on the <b><span class="math">0° AP</span></b> view, your needle tip looks centered over the target calyx, but when you click <b>Pull Stylet</b> you get a Dry Tap. Tilt the C-arm to <b><span class="math">+30° Cephalad</span></b> (detector tilted toward the head, looking caudally):
+      </p>
+      <ul>
+        <li><b>If the needle tip shifts DOWNWARD (Caudally, toward the feet) relative to the calyx:</b> Your needle is <b>TOO SHALLOW / SUPERFICIAL (Posterior)</b>! Pull back to subcutaneous fat (&lt;30 mm) and <b>STEEPEN your Pitch (decrease Pitch angle toward 10°–25°)</b>.</li>
+        <li><b>If the needle tip shifts UPWARD (Cephalad, toward the head) relative to the calyx:</b> Your needle is <b>TOO DEEP (Anterior overshoot)</b>! Pull back to subcutaneous fat and <b>FLATTEN your Pitch (increase Pitch angle toward 35°–50°)</b>.</li>
+        <li><b>If the needle tip stays locked on the center of the calyx on BOTH <span class="math">0° AP</span> and <span class="math">+30° Ceph</span>:</b> Two intersecting lines in 3D space define a single point—your needle tip is <b>guaranteed to be inside the calyceal lumen!</b></li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- SECTION 5 -->
+  <section class="sec-card" id="sec5">
+    <h2>5. Supracostal (11th–12th ICS) vs. Subcostal Biomechanics &amp; Respiration</h2>
+    <div class="grid-2">
+      <div>
+        <h3>Why Not Puncture Every Upper-Pole Calyx Subcostally on Inspiration?</h3>
+        <p>
+          An upper-pole infundibulum points cephalolaterally and drains <b>caudally (<span class="math">-8° to -16°</span> downward)</b> into the renal pelvis.
+        </p>
+        <ul>
+          <li>If you enter <b>subcostally (below the 12th rib)</b> and angle <b>upward (<span class="math">+25° to +35°</span>)</b> into the upper pole, you create a <b>45°–55° Hairpin Dog-Leg Kink</b>!</li>
+          <li>While acceptable for a tiny isolated stone sitting inside the upper cup, in an <b>Upper-Pole Staghorn or UPJ stone (Case 4)</b>, trying to lever a rigid nephroscope from an upward subcostal tract down into the pelvis uses the 12th rib as a bony fulcrum and <b>tears the upper infundibular neck</b>!</li>
+          <li>Entering <b>supracostally (above the 12th rib)</b> lets you aim caudally straight down the hallway of the kidney, pelvis, and ureter (<span class="math">&lt;10°</span> dog-leg, 98% reach).</li>
+        </ul>
+      </div>
+      <div>
+        <h3>The 2 Golden Rules of Supracostal 11th–12th ICS Access</h3>
+        <ol>
+          <li><b>Full Expiration (<span class="math">Exp Hold</span>) for Intercostal Passage:</b> During deep inspiration, the lung expands downward into the costophrenic sulcus across the 11th–12th ICS. Locking ventilation in <b>Full Expiration</b> retracts the visceral pleura cephalad above the lower 11th–12th ICS.</li>
+          <li><b>Skate Directly Over the UPPER Border of the 12th Rib:</b> The intercostal/subcostal artery, vein, and nerve run in the <b>subcostal groove along the INFERIOR (bottom) border of the 11th and 12th ribs</b>. Always place Point B immediately on the <b>SUPERIOR (upper) edge of the 12th rib</b>—never hug the bottom of the 11th rib!</li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+  <!-- SECTION 6 -->
+  <section class="sec-card" id="sec6">
+    <h2>6. Tactile Haptics, The "Two-Hole Fascial Lock" &amp; Troubleshooting</h2>
+    <h3>The 2 Tactile Pops &amp; Fluoroscopic Signs</h3>
+    <ul>
+      <li><b>1st Tactile Pop (~26–32 mm):</b> Piercing the tough, fibrous <b>Lumbodorsal (Thoracolumbar) Fascia</b>. Before this pop, the needle is in soft subcutaneous fat; if you let go of the hub without a radiolucent clamp, gravity droops the hub by ~8°.</li>
+      <li><b>2nd Tactile Pop (~55–85 mm) &amp; The Calyceal Dimple Sign:</b> As the needle tip touches the renal capsule and papilla, watch the contrast-filled calyceal cup on <span class="math">0° AP</span>: the kidney moves slightly medially and the crescentic contrast cup <b>indents/flattens ("Dimple Sign")</b>. A crisp 3–4 mm forward push pops through the papilla with a sudden loss of resistance.</li>
+    </ul>
+
+    <div class="callout-warn">
+      <b>Why You Must Retract Before Redirecting (The "Two-Hole Lock" &amp; Parenchymal Shear):</b><br>
+      Once your needle crosses the skin (<b>Hole #1 at 0 mm</b>) and the tough lumbodorsal fascia (<b>Hole #2 at 28 mm</b>), those two fibrous rings lock a straight line. And once deeper than <b>42–50 mm</b>, the sharp beveled tip is inside the vascular renal cortex.<br>
+      • <b>If you pivot the hub while buried in the renal cortex (&gt;45 mm):</b> The fascia acts as a fulcrum and the needle tip sweeps sideways like a windshield wiper, <b>slicing the renal parenchyma</b>.<br>
+      • <b>For small tweaks (&lt;5°):</b> Retract just outside the renal capsule (<span class="math">~35–40 mm</span>, into Gerota's fat).<br>
+      • <b>For large angle changes (&gt;5°–10°):</b> Retract above the lumbodorsal fascia (<span class="math">&lt;24 mm</span>, into subcutaneous fat) so you unthread Hole #2 and don't bend the needle shaft into a Z-kink!
+    </div>
+  </section>
+
+  <!-- SECTION 7: PLACEHOLDER FOR PART 2 (INTERACTIVE DIAGRAMS & 10-CASE ENCYCLOPEDIA) -->
+  <section class="sec-card" id="sec7">
+    <h2>7. Interactive Biomechanical Diagrams &amp; Complete 10-Case / 40-Calyx Encyclopedia</h2>
+    <div id="interactiveGuideMount">
+      <p style="color:var(--gold);">Loading interactive diagrams &amp; 10-case reference encyclopedia (<code>guide-cases.js</code>)...</p>
+    </div>
+  </section>
+
+</div>
+
+<script src="cases.js"></script>
+<script src="guide-cases.js"></script>
+</body>
+</html>
+<!-- === END OF FILE guide.html === -->
