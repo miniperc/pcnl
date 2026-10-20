@@ -1,5 +1,5 @@
 // ============================================================================
-// FILE: physics.js — v7.5 OR REALISM, CALM AUTO-SOLVE & NO-SPOILER TACTILE ENGINE
+// FILE: physics.js — v7.6 DYNAMIC C-ARM AUTO-SOLVE & TOP-BAR BRIEFING ENGINE
 // ============================================================================
 const lihCanvas = document.createElement('canvas');
 const lihCtx = lihCanvas.getContext('2d');
@@ -13,9 +13,9 @@ const bCtx = benchCanvas.getContext('2d');
 fluoroCanvas.style.touchAction = 'none';
 skinCanvas.style.touchAction = 'none';
 
-// Default OR Realism Settings: Audio Pops OFF, Continuous Fluoro OFF (Pedal LIH Mode)
+// Default Settings: Audio Pops OFF, Continuous Fluoro ON
 state.soundOn = false;
-state.contFluoro = false;
+state.contFluoro = true;
 state.assistedSnapped = false;
 state.punctureAttempts = 0;
 state.fasciaAnchored = false;
@@ -72,6 +72,10 @@ function getInfundibularUnitVector(cal) {
 }
 
 (function calibrateAnatomicalCases() {
+  // Remove any duplicate playbook card injected by older renderer.js
+  const oldPb = document.getElementById('profPlaybookCard');
+  if (oldPb) oldPb.remove();
+
   const caseSel = document.getElementById('caseSelect');
   if (caseSel && CASES.length > 0) {
     caseSel.innerHTML = CASES.map((c, idx) => `<option value="${idx}">${c.name}</option>`).join('');
@@ -205,7 +209,7 @@ function initCase(idx, keepCalyx = false) {
   state.blushClouds = [];
   document.getElementById('clearBlushBtn').style.display = 'none';
   state.styletPulled = false; state.blindRevealed = false;
-  state.lihDirty = true; // Take one initial scout X-ray on case load
+  state.lihDirty = true;
   document.getElementById('narrationBanner').classList.remove('visible');
   const revModal = document.getElementById('punctureReviewModal');
   if (revModal) revModal.style.display = 'none';
@@ -216,7 +220,7 @@ function initCase(idx, keepCalyx = false) {
 function resetCase() { initCase(state.caseIdx, true); }
 
 // ============================================================================
-// CALM, SMOOTH COSINE-INTERPOLATED AUTO-SOLVE ENGINE
+// DYNAMIC C-ARM AUTO-SOLVE ENGINE (ROTATES C-ARM AT EVERY STEP!)
 // ============================================================================
 function buildAutoSolutionSteps() {
   const cal = getTargetCalyxBase();
@@ -224,7 +228,7 @@ function buildAutoSolutionSteps() {
   const opt = computeOptimalGeometryForTechnique(tech);
   const modeSel = document.getElementById('errorScenarioSelect');
   const scenarioMode = modeSel ? modeSel.value : 'auto_smart';
-  const techTitle = tech === 'hybrid' ? `HYBRID (0° + ${opt.calyxAxDeg}°)` : (tech === 'triangulation' ? 'TRIANGULATION' : `BULL'S EYE`);
+  const techTitle = tech === 'hybrid' ? `HYBRID (0° + ${opt.calyxAxDeg}° + CEPH)` : (tech === 'triangulation' ? 'TRIANGULATION' : `BULL'S EYE`);
   const steps = [];
 
   const getDepthAtCalyxX = (pDeg, cDeg, latMm) => {
@@ -235,39 +239,51 @@ function buildAutoSolutionSteps() {
   if (scenarioMode === 'err_shallow') {
     const shallowPitch = Math.min(55, opt.pitchDeg + 12);
     const apD = getDepthAtCalyxX(shallowPitch, opt.corDeg, opt.latCm * 10);
-    steps.push({ title: `DEMO 1: SHALLOW PASS ON 0° AP`, techLabel: `DEPTH ILLUSION`, duration: 4.8, target: { respMode: opt.respMode, cArmAx: 0, cArmOb: 0, latCm: opt.latCm, ccCm: opt.ccCm, corDeg: opt.corDeg, pitchDeg: shallowPitch, depthMm: apD }, narration: `Pitch (<b>${shallowPitch.toFixed(1)}°</b>) is too flat—passing superficially behind the calyx!` });
-    steps.push({ title: `DEMO 1: +30° CEPH PARALLAX`, techLabel: `PARALLAX CHECK`, duration: 5.0, target: { cArmAx: 0, cArmOb: 30, pitchDeg: shallowPitch, depthMm: apD }, narration: `On <b>+30° Cephalad</b> tilt, the superficial tip projects <b>downward (caudally)</b> while the needle elongates in profile!` });
-    steps.push({ title: `DEMO 1: RETRACT TO FAT & STEEPEN PITCH`, techLabel: `SAFE PIVOT FIX`, duration: 4.5, target: { cArmAx: 0, cArmOb: 30, pitchDeg: opt.pitchDeg, depthMm: 18 }, narration: `Retracting to <b>18 mm (Subcutaneous Fat)</b> before steepening Pitch to <b>${opt.pitchDeg.toFixed(1)}°</b>.` });
+    steps.push({ title: `DEMO 1: SHALLOW PASS ON 0° AP`, techLabel: `DEPTH ILLUSION`, duration: 4.5, target: { respMode: opt.respMode, cArmAx: 0, cArmOb: 0, latCm: opt.latCm, ccCm: opt.ccCm, corDeg: opt.corDeg, pitchDeg: shallowPitch, depthMm: apD }, narration: `On <b>0° AP</b>, Pitch (<b>${shallowPitch.toFixed(1)}°</b>) is too flat—passing superficially behind the calyx!` });
+    steps.push({ title: `DEMO 1: SWING C-ARM TO +30° CEPH`, techLabel: `PARALLAX CHECK`, duration: 4.8, target: { cArmAx: 0, cArmOb: 30, pitchDeg: shallowPitch, depthMm: apD }, narration: `Swinging C-arm to <b>+30° Cephalad</b> elongates the needle and shows the superficial tip projecting <b>downward (caudally)</b>!` });
+    steps.push({ title: `DEMO 1: RETRACT TO FAT & STEEPEN PITCH`, techLabel: `SAFE PIVOT FIX`, duration: 4.2, target: { cArmAx: 0, cArmOb: 30, pitchDeg: opt.pitchDeg, depthMm: 18 }, narration: `Retracting to <b>18 mm (Subcutaneous Fat)</b> before steepening Pitch to <b>${opt.pitchDeg.toFixed(1)}°</b>.` });
   } else if (scenarioMode === 'err_deep') {
     const deepPitch = Math.max(12, opt.pitchDeg - 9.5);
     const apD = getDepthAtCalyxX(deepPitch, opt.corDeg, opt.latCm * 10);
-    steps.push({ title: `DEMO 2: DEEP OVERSHOOT ON 0° AP`, techLabel: `ANTERIOR TRAP`, duration: 4.8, target: { respMode: opt.respMode, cArmAx: 0, cArmOb: 0, latCm: opt.latCm, ccCm: opt.ccCm, corDeg: opt.corDeg, pitchDeg: deepPitch, depthMm: apD }, narration: `Pitch (<b>${deepPitch.toFixed(1)}°</b>) is too steep—plunging anteriorly past the posterior calyx!` });
-    steps.push({ title: `DEMO 2: +30° CEPH PARALLAX`, techLabel: `PARALLAX CHECK`, duration: 5.0, target: { cArmAx: 0, cArmOb: 30, pitchDeg: deepPitch, depthMm: apD }, narration: `On <b>+30° Cephalad</b> tilt, the deep tip projects <b>upward (cephalad)</b> above the calyx!` });
-    steps.push({ title: `DEMO 2: RETRACT TO FAT & FLATTEN PITCH`, techLabel: `SAFE PIVOT FIX`, duration: 4.5, target: { cArmAx: 0, cArmOb: 30, pitchDeg: opt.pitchDeg, depthMm: 18 }, narration: `Retracting to <b>18 mm</b> before flattening Pitch to <b>${opt.pitchDeg.toFixed(1)}°</b>.` });
+    steps.push({ title: `DEMO 2: DEEP OVERSHOOT ON 0° AP`, techLabel: `ANTERIOR TRAP`, duration: 4.5, target: { respMode: opt.respMode, cArmAx: 0, cArmOb: 0, latCm: opt.latCm, ccCm: opt.ccCm, corDeg: opt.corDeg, pitchDeg: deepPitch, depthMm: apD }, narration: `Pitch (<b>${deepPitch.toFixed(1)}°</b>) is too steep—plunging anteriorly past the posterior calyx!` });
+    steps.push({ title: `DEMO 2: SWING C-ARM TO +30° CEPH`, techLabel: `PARALLAX CHECK`, duration: 4.8, target: { cArmAx: 0, cArmOb: 30, pitchDeg: deepPitch, depthMm: apD }, narration: `Swinging C-arm to <b>+30° Cephalad</b> reveals the deep tip projecting <b>upward (cephalad)</b> above the calyx!` });
+    steps.push({ title: `DEMO 2: RETRACT TO FAT & FLATTEN PITCH`, techLabel: `SAFE PIVOT FIX`, duration: 4.2, target: { cArmAx: 0, cArmOb: 30, pitchDeg: opt.pitchDeg, depthMm: 18 }, narration: `Retracting to <b>18 mm</b> before flattening Pitch to <b>${opt.pitchDeg.toFixed(1)}°</b>.` });
   } else if (scenarioMode === 'err_coronal') {
-    steps.push({ title: `DEMO 3: CORONAL DOG-LEG DRIFT`, techLabel: `PLANE 1 ERROR`, duration: 4.8, target: { respMode: opt.respMode, cArmAx: 0, cArmOb: 0, latCm: opt.latCm, ccCm: 0.0, corDeg: opt.corDeg - 25, pitchDeg: opt.pitchDeg, depthMm: 45 }, narration: `Entering off the 0° infundibular line creates a severe dog-leg kink!` });
-    steps.push({ title: `DEMO 3: RETRACT & REALIGN ON 0° AP`, techLabel: `PLANE 1 FIX`, duration: 4.5, target: { cArmAx: 0, cArmOb: 0, latCm: opt.latCm, ccCm: opt.ccCm, corDeg: opt.corDeg, pitchDeg: opt.pitchDeg, depthMm: 15 }, narration: `Retracting to fat and aligning Point B (<b>CC=${opt.ccCm}cm</b>) and Coronal Aim (<b>${opt.corDeg}°</b>).` });
+    steps.push({ title: `DEMO 3: CORONAL DOG-LEG DRIFT`, techLabel: `PLANE 1 ERROR`, duration: 4.5, target: { respMode: opt.respMode, cArmAx: 0, cArmOb: 0, latCm: opt.latCm, ccCm: 0.0, corDeg: opt.corDeg - 25, pitchDeg: opt.pitchDeg, depthMm: 45 }, narration: `Entering off the 0° infundibular line creates a severe dog-leg kink!` });
+    steps.push({ title: `DEMO 3: RETRACT & REALIGN ON 0° AP`, techLabel: `PLANE 1 FIX`, duration: 4.2, target: { cArmAx: 0, cArmOb: 0, latCm: opt.latCm, ccCm: opt.ccCm, corDeg: opt.corDeg, pitchDeg: opt.pitchDeg, depthMm: 15 }, narration: `Retracting to fat and aligning Point B (<b>CC=${opt.ccCm}cm</b>) and Coronal Aim (<b>${opt.corDeg}°</b>).` });
   } else if (scenarioMode === 'err_bullseye') {
-    steps.push({ title: `DEMO 4: BULL'S EYE COAXIAL DRIFT`, techLabel: `OBLIQUE DRIFT`, duration: 4.8, target: { respMode: opt.respMode, cArmAx: opt.trueAxDeg, cArmOb: opt.trueObDeg, latCm: opt.latCm, ccCm: opt.ccCm, corDeg: opt.corDeg + 14, pitchDeg: opt.pitchDeg - 9, depthMm: 22 }, narration: `At the coaxial C-arm angle (<b>${opt.trueAxDeg}° Ax, ${opt.trueObDeg}° Tilt</b>), hub drift turns the dot into a line.` });
+    steps.push({ title: `DEMO 4: BULL'S EYE COAXIAL DRIFT`, techLabel: `OBLIQUE DRIFT`, duration: 4.5, target: { respMode: opt.respMode, cArmAx: opt.trueAxDeg, cArmOb: opt.trueObDeg, latCm: opt.latCm, ccCm: opt.ccCm, corDeg: opt.corDeg + 14, pitchDeg: opt.pitchDeg - 9, depthMm: 22 }, narration: `At the coaxial C-arm angle (<b>${opt.trueAxDeg}° Ax, ${opt.trueObDeg}° Tilt</b>), hub drift turns the dot into a line.` });
   }
 
+  // Step A: 0° AP View — Lock Respiration & Plane 1 Infundibular Line
   steps.push({
-    title: `RESPIRATION & POINT B ALIGNMENT`, techLabel: techTitle, duration: 4.8,
-    target: { respMode: opt.respMode, cArmAx: tech === 'bullseye' ? opt.trueAxDeg : 0, cArmOb: tech === 'bullseye' ? opt.trueObDeg : 0, latCm: opt.latCm, ccCm: opt.ccCm, corDeg: opt.corDeg, pitchDeg: opt.pitchDeg, depthMm: 3 },
+    title: `0° AP VIEW: RESPIRATION & PLANE 1 LINE`, techLabel: techTitle, duration: 4.5,
+    target: { respMode: opt.respMode, cArmAx: 0, cArmOb: 0, latCm: opt.latCm, ccCm: opt.ccCm, corDeg: opt.corDeg, pitchDeg: opt.pitchDeg, depthMm: 3 },
     narration: cal.supracostal
-      ? `<b>Supracostal Upper Border of 12th Rib:</b> Locking <b>Exp Hold</b> and placing Point B at <b>L=${opt.latCm}cm, CC=${opt.ccCm >= 0 ? '+' : ''}${opt.ccCm}cm</b> right on the superior edge of the 12th rib.`
-      : `<b>Subcostal Access:</b> Locking <b>Insp Hold</b> and placing Point B at <b>L=${opt.latCm}cm, CC=${opt.ccCm}cm</b> along the <b>${opt.corDeg}°</b> infundibular axis.`
+      ? `<b>0° AP View:</b> Locking <b>Exp Hold</b> and placing Point B at <b>L=${opt.latCm}cm, CC=${opt.ccCm >= 0 ? '+' : ''}${opt.ccCm}cm</b> on the upper border of the 12th rib.`
+      : `<b>0° AP View:</b> Locking <b>Insp Hold</b> and aligning Point B (<b>L=${opt.latCm}cm, CC=${opt.ccCm}cm</b>) along the <b>${opt.corDeg}°</b> infundibular line.`
   });
+
+  // Step B: Rotate C-Arm to Coaxial Bull's Eye (+30° Axial) & Cross Fascia
   steps.push({
-    title: `FASCIA POP & BIPLANAR DEPTH CHECK`, techLabel: techTitle, duration: 5.2,
-    target: { cArmAx: tech === 'bullseye' ? opt.trueAxDeg : 0, cArmOb: tech === 'triangulation' ? 30 : (tech === 'bullseye' ? opt.trueObDeg : 0), latCm: opt.latCm, ccCm: opt.ccCm, corDeg: opt.corDeg, pitchDeg: opt.pitchDeg, depthMm: opt.tractDistMm - 12 },
-    narration: `Advancing smoothly through the <b>Lumbodorsal Fascia (${opt.fasciaDepthMm} mm) [1st Pop]</b> and checking depth parallax.`
+    title: `ROTATE C-ARM TO ${opt.trueAxDeg}° BULL'S EYE & POP FASCIA`, techLabel: techTitle, duration: 4.8,
+    target: { cArmAx: opt.trueAxDeg, cArmOb: opt.trueObDeg, latCm: opt.latCm, ccCm: opt.ccCm, corDeg: opt.corDeg, pitchDeg: opt.pitchDeg, depthMm: opt.fasciaDepthMm + 4 },
+    narration: `<b>Rotating C-Arm to ${opt.trueAxDeg}° Axial (${opt.trueObDeg}° Tilt):</b> Looking straight down the needle barrel (hub ring over tip) while punching through the <b>Lumbodorsal Fascia (${opt.fasciaDepthMm} mm) [1st Pop]</b>.`
   });
+
+  // Step C: Swing C-Arm to +30° Cephalad Oblique for Depth Parallax Check
   steps.push({
-    title: `CAPSULAR DIMPLE & PAPILLARY ENTRY [2ND POP]`, techLabel: techTitle, duration: 5.0,
+    title: `SWING C-ARM TO +30° CEPHALAD FOR DEPTH PARALLAX`, techLabel: techTitle, duration: 4.8,
+    target: { cArmAx: 0, cArmOb: 30, latCm: opt.latCm, ccCm: opt.ccCm, corDeg: opt.corDeg, pitchDeg: opt.pitchDeg, depthMm: opt.tractDistMm - 10 },
+    narration: `<b>Swinging C-Arm to +30° Cephalad Tilt:</b> Elongating the needle shaft in profile to verify our <b>${opt.pitchDeg}° Pitch</b> aims dead-center at the calyx depth (${opt.tractDistMm - 10} mm).`
+  });
+
+  // Step D: Return to 0° AP — Watch Dimple & Pop into Papilla
+  steps.push({
+    title: `0° AP VIEW: CAPSULAR DIMPLE & PAPILLARY ENTRY [2ND POP]`, techLabel: techTitle, duration: 4.5,
     target: { cArmAx: 0, cArmOb: 0, latCm: opt.latCm, ccCm: opt.ccCm, corDeg: opt.corDeg, pitchDeg: opt.pitchDeg, depthMm: opt.tractDistMm },
     onArrive: () => { pullStylet(true); },
-    narration: `<b>2nd Tactile Pop (${opt.tractDistMm} mm):</b> Watch the subtle calyceal cup dimple as the tip enters the papilla (Dog-leg: <b>${opt.dogLegDeg.toFixed(1)}°</b>)!`
+    narration: `<b>Returning C-Arm to 0° AP:</b> Watch the calyceal contrast cup indent (dimple sign) as the tip pops into the papilla at <b>${opt.tractDistMm} mm</b> (Dog-leg: <b>${opt.dogLegDeg.toFixed(1)}°</b>)!`
   });
 
   steps.forEach((s, idx) => { s.title = `STEP ${idx + 1}/${steps.length}: ${s.title}`; });
@@ -344,7 +360,6 @@ function tickAutoSolve(dt) {
   const st = state.autoSteps[state.autoStepIdx];
   state.autoStepTimer += dt * speed;
 
-  // Smooth cosine ease-in-out over full step duration (never jumps or snaps!)
   const progress = Math.max(0, Math.min(1, state.autoStepTimer / st.duration));
   const ease = 0.5 - 0.5 * Math.cos(progress * Math.PI);
   const s = state.autoStartVals;
@@ -401,7 +416,7 @@ function syncAllUI() {
   const showHints = state.assistedSnapped || state.autoPlaying;
   document.getElementById('trigHint').textContent = showHints
     ? `Tract:${Math.round(Math.hypot(surfMm, cal.z))}mm | Ideal Pitch:${(Math.atan2(surfMm, cal.z) * 180 / Math.PI).toFixed(1)}°`
-    : `Hold [SPACE] for Fluoro`;
+    : `Manual OR Mode`;
 }
 
 document.getElementById('caseSelect').addEventListener('change', e => initCase(parseInt(e.target.value, 10), false));
@@ -612,7 +627,6 @@ function computeDiagnostics() {
   const pleuraBorderY = rib12CenterY + (state.respMode === 'insp' ? 5 : 16);
   const pleuraHit = state.depthMm >= tRib && yAtRib > pleuraBorderY;
 
-  // Tactile feel only (NO spoilers revealing whether you are inside the lumen vs missing!)
   let tactileFeel = "Resting on Skin (0 mm)", resistanceN = 0.0, popZone = 'none', dimpleFactor = 0.0;
   if (state.depthMm <= 0.5) { tactileFeel = "Resting on Skin"; resistanceN = 0.0; }
   else if (state.depthMm <= 3.5) { tactileFeel = "Piercing Dermis [Skin Pop]"; resistanceN = 3.2; popZone = 'skin'; }
@@ -641,20 +655,34 @@ function updateDiagnosticsAndCoach() {
   const calSel = document.getElementById('calyxSelect');
   if (calSel) {
     Array.from(calSel.options).forEach(opt => {
-      if (c.calyces[opt.value]) opt.textContent = `Target: ${c.calyces[opt.value].label} (${c.calyces[opt.value].reachPct}% reach)`;
+      if (c.calyces[opt.value]) {
+        const isBest = opt.value === c.defaultCalyx ? ' ★ Best' : '';
+        opt.textContent = `Target: ${c.calyces[opt.value].label} (${c.calyces[opt.value].reachPct}% reach${isBest})`;
+      }
     });
+  }
+
+  // Update Top-Bar Case Brief & Calyx Note Strip (right beside Case & Target!)
+  const topStrip = document.getElementById('topBriefStrip');
+  if (topStrip) {
+    const isOptimalCalyx = state.targetKey === c.defaultCalyx;
+    const calCol = isOptimalCalyx ? '#4ade80' : '#fbbf24';
+    topStrip.innerHTML = `
+      <div><b>Case Brief:</b> ${c.clinicalBrief || c.name}</div>
+      <div style="color:${calCol};"><b>Calyx Choice (${cal.label} — ${cal.reachPct}% Reach, ${cal.neckW}mm Neck):</b> ${cal.calyxNote || ''}</div>
+    `;
   }
 
   document.getElementById('hapticLayerText').textContent = `Tactile Feel: ${d.layer}`;
   document.getElementById('hapticForceVal').textContent = `${d.resistanceN.toFixed(1)} N`;
 
-  // Populate Unified Step-by-Step Guide & Professor Playbook
   const pbBox = document.getElementById('casePlaybookBox');
   if (pbBox && c.profPlaybook) {
+    const cleanTrick = c.profPlaybook.trick.replace(/PROFESSOR'S TRICK\s*[—-]\s*/i, '');
     pbBox.innerHTML = `
-      <div style="color:#fca5a5;margin-bottom:3px;"><b>⚠️ Trap:</b> ${c.profPlaybook.trap}</div>
+      <div style="color:#fca5a5;margin-bottom:2px;"><b>⚠️ Trap:</b> ${c.profPlaybook.trap}</div>
       <div style="color:#fde047;background:rgba(234,179,8,0.1);padding:3px 6px;border-radius:3px;border-left:2px solid #eab308;">
-        <b>💡 ${c.profPlaybook.trick}</b>
+        <b>💡 Trick:</b> ${cleanTrick}
       </div>
     `;
   }
@@ -674,34 +702,23 @@ function updateDiagnosticsAndCoach() {
     return `<li class="${cls}"><span style="font-family:monospace;font-weight:700;">${sym}</span><span>${txt}</span></li>`;
   }).join('');
 
-  // Contextual Non-Spoiler OR Hints as You Advance the Needle
   const hintEl = document.getElementById('liveHintBox');
   if (hintEl) {
     if (state.respMode === 'tidal') {
-      hintEl.innerHTML = `<b>💡 Step 1 Hint:</b> Click <b>[Resp]</b> to lock ventilation (${cal.supracostal ? '<b>Exp Hold</b> for supracostal safety' : '<b>Insp Hold</b> for subcostal access'}) before puncturing.`;
+      hintEl.innerHTML = `<b>💡 Hint:</b> Click <b>[Resp]</b> to lock breathing (${cal.supracostal ? '<b>Exp Hold</b> for supracostal' : '<b>Insp Hold</b> for subcostal'}) before puncturing.`;
     } else if (state.depthMm < 5) {
-      hintEl.innerHTML = `<b>💡 Step 2 Hint (At Skin 0mm):</b> Use <b>[0° AP]</b> (and press <b>SPACE</b> for fluoro) to align Point B and your Coronal Aim along the target infundibular neck.`;
+      hintEl.innerHTML = `<b>💡 Hint (At Skin 0mm):</b> On <b>[0° AP]</b>, align Point B and Coronal Aim with the target infundibular neck.`;
     } else if (state.depthMm >= 25 && state.depthMm <= 45 && Math.abs(state.cArmOb) < 10 && Math.abs(state.cArmAx) < 15) {
-      hintEl.innerHTML = `<b>💡 Step 3 Hint (Past Fascia ~${Math.round(state.depthMm)}mm):</b> You've crossed the lumbodorsal fascia. Now is the ideal time to switch C-arm to <b>[30° Ceph]</b> or <b>[30° Bull's Eye]</b> and tap <b>SPACE</b> to check your needle Pitch (depth)!`;
+      hintEl.innerHTML = `<b>💡 Hint (~${Math.round(state.depthMm)}mm):</b> You've crossed the fascia! Switch C-arm to <b>[30° Ceph]</b> or <b>[30° Bull's Eye]</b> to check your depth Pitch.`;
     } else if (state.depthMm > 45 && !state.styletPulled) {
-      hintEl.innerHTML = `<b>💡 Step 4 Hint (Deep Approach ${Math.round(state.depthMm)}mm):</b> Watch the contrast cup on <b>[0° AP]</b> for subtle calyceal dimpling. Remember: if you need to change angle, retract to <b>&lt;35mm</b> first! When ready, click <b>💧 Pull Stylet</b>.`;
+      hintEl.innerHTML = `<b>💡 Hint (${Math.round(state.depthMm)}mm):</b> Watch the contrast cup on <b>[0° AP]</b> for subtle dimpling. Retract &lt;35mm before redirecting! When ready, click <b>💧 Pull Stylet</b>.`;
     }
-  }
-
-  if (!state.styletPulled) {
-    const badge = document.getElementById('statusBadge'), txt = document.getElementById('statusText');
-    badge.className = 'badge-pill b-info';
-    badge.textContent = `${cal.label.toUpperCase()} (${cal.reachPct}% REACH | ${cal.neckW}MM NECK)`;
-    txt.innerHTML = `<b>Case Brief:</b> ${c.clinicalBrief || c.name}<br><span style="color:#7dd3fc;"><b>Calyx Note:</b> ${cal.calyxNote || ''}</span>`;
   }
 }
 
 function pullStylet(fromAutoSolve = false) {
   state.styletPulled = true; state.blindRevealed = true; state.lihDirty = true;
   const d = computeDiagnostics(), c = CASES[state.caseIdx], cal = getTargetCalyxBase(), opt = computeOptimalGeometryForTechnique(state.coachMode);
-  const badge = document.getElementById('statusBadge'), txt = document.getElementById('statusText');
-  if (d.inTarget) { badge.className = 'badge-pill b-ok'; badge.textContent = 'CLEAR URINE EFFLUX — TRANSPAPILLARY ENTRY!'; txt.innerHTML = `Entered <b>${cal.label}</b> with a <b>${d.dogLegDeg.toFixed(1)}°</b> dog-leg angle.`; }
-  else { badge.className = 'badge-pill b-err'; badge.textContent = d.inInfundibulumWall ? 'VENOUS BLEEDING (INFUNDIBULAR NECK)' : (d.inAnt ? 'ANTERIOR CALYX TRAP' : 'DRY TAP — MISSED CALYX'); txt.innerHTML = `Missed target lumen (${d.distToCalyx.toFixed(1)} mm from papilla center).`; }
   updateDiagnosticsAndCoach();
   if (!fromAutoSolve) openAutomaticPunctureReview(d, c, cal, opt);
 }
@@ -742,7 +759,7 @@ function openAutomaticPunctureReview(d, c, cal, opt) {
   if (c.clinicalBrief) patientNotes.push(`<b>Patient Scenario:</b> ${c.clinicalBrief}`);
   if (cal.calyxNote) patientNotes.push(`<b>Selected Calyx Analysis (${cal.label}):</b> ${cal.calyxNote}`);
   if (state.targetKey !== c.defaultCalyx && c.calyces[c.defaultCalyx]) patientNotes.push(`<b>Why ${c.calyces[c.defaultCalyx].label} Is Preferred:</b> ${c.calyces[c.defaultCalyx].calyxNote}`);
-  if (c.casePearl) patientNotes.push(`<b>Attending Masterclass Pearl:</b> ${c.casePearl}`);
+  if (c.casePearl) patientNotes.push(`<b>Clinical Pearl:</b> ${c.casePearl}`);
 
   const grade = score >= 90 ? 'A' : (score >= 78 ? 'B' : (score >= 62 ? 'C' : (score >= 45 ? 'D' : 'F')));
   document.getElementById('revCaseTitle').textContent = `${c.name} — ${cal.label}`;
