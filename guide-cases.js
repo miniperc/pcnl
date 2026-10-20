@@ -1,0 +1,320 @@
+// ============================================================================
+// FILE: guide-cases.js — INTERACTIVE BIOMECHANICAL DIAGRAMS & 10-CASE ENCYCLOPEDIA
+// Automatically mounts into Section 7 of guide.html
+// ============================================================================
+(function initInteractiveGuide() {
+  const mount = document.getElementById('interactiveGuideMount');
+  if (!mount) return;
+
+  function getRibYAtX(x, ribBaseY) {
+    return ribBaseY + 4 - 0.205 * (x - 74);
+  }
+
+  function calcIdealForCalyx(c, calKey) {
+    const pel = c.pelvis;
+    const cal = { ...c.calyces[calKey] };
+    if (calKey === 'upper') {
+      if (c.stoneType !== 'horseshoe') {
+        cal.x = pel.x + 20;
+        cal.y = c.rib12Y - 1;
+        cal.coronalDeg = -8;
+        cal.supracostal = true;
+      } else {
+        cal.supracostal = false;
+        cal.coronalDeg = -8;
+      }
+    } else if (!cal.isDiverticulum) {
+      const dx = cal.x - pel.x;
+      const dy = pel.y - cal.y;
+      cal.coronalDeg = Math.round(Math.atan2(dy, dx) * 180 / Math.PI * 2) / 2;
+    }
+
+    const resp = cal.supracostal ? 'Exp Hold' : 'Insp Hold';
+    const radCor = cal.coronalDeg * Math.PI / 180;
+    const radAx = cal.axialDeg * Math.PI / 180;
+    const surfDistMm = cal.z * Math.tan(radAx);
+
+    let latCm = Math.round(((surfDistMm * Math.cos(radCor)) / 10) * 10) / 10;
+    latCm = Math.max(1.2, Math.min(5.5, latCm));
+    let ccCm = Math.round((-latCm * Math.tan(radCor)) * 10) / 10;
+    ccCm = Math.max(-5.5, Math.min(4.2, ccCm));
+    let corDeg = cal.coronalDeg;
+
+    if (cal.supracostal) {
+      const skinX = cal.x + latCm * 10;
+      const rib12TopY = getRibYAtX(skinX, c.rib12Y) + 4.8;
+      const calLiveY = cal.y + 6;
+      ccCm = Math.round(((rib12TopY - calLiveY) / 10) * 10) / 10;
+      corDeg = Math.round(Math.atan2(-ccCm, latCm) * 180 / Math.PI * 2) / 2;
+    }
+    if (cal.forceSubcostal) {
+      ccCm = -2.0;
+      corDeg = Math.round(Math.atan2(-ccCm, latCm) * 180 / Math.PI * 2) / 2;
+    }
+
+    const surfMm = Math.hypot(latCm * 10, ccCm * 10);
+    const pitchDeg = Math.round(Math.atan2(surfMm, cal.z) * 180 / Math.PI * 2) / 2;
+    const tractMm = Math.round(Math.hypot(surfMm, cal.z));
+    return { resp, latCm, ccCm, corDeg, pitchDeg, tractMm, cal };
+  }
+
+  mount.innerHTML = `
+    <!-- INTERACTIVE SIMULATOR WIDGETS -->
+    <div class="grid-2" style="margin-bottom:22px;">
+      <!-- WIDGET 1: LIVE POINT B & PITCH TRIGONOMETRY CALCULATOR -->
+      <div style="background:#080f1d;border:1px solid #1e3a5f;border-radius:6px;padding:14px;">
+        <h3 style="margin-top:0;color:#38bdf8;">Interactive Point B &amp; Pitch Calculator</h3>
+        <p style="font-size:12.5px;color:#94a3b8;">Adjust the 3 anatomical parameters of any calyx to see how Point B (<span class="math">L, CC</span>) and Needle Pitch change mathematically:</p>
+        <div style="display:flex;flex-direction:column;gap:8px;margin:10px 0;">
+          <div>
+            <div style="display:flex;justify-content:space-between;font-size:12px;"><span>Calyx Anterior Depth (<span class="math">Z</span>):</span><b id="gValZ" style="color:#38bdf8;">68 mm</b></div>
+            <input type="range" id="gSlZ" min="45" max="115" value="68" style="width:100%;">
+          </div>
+          <div>
+            <div style="display:flex;justify-content:space-between;font-size:12px;"><span>Calyx Axial Angle (<span class="math">&theta;<sub>axial</sub></span>):</span><b id="gValAx" style="color:#4ade80;">30°</b></div>
+            <input type="range" id="gSlAx" min="12" max="45" value="30" style="width:100%;">
+          </div>
+          <div>
+            <div style="display:flex;justify-content:space-between;font-size:12px;"><span>Infundibular Coronal Slope (<span class="math">&theta;<sub>coronal</sub></span>):</span><b id="gValCor" style="color:#fde047;">+22°</b></div>
+            <input type="range" id="gSlCor" min="-20" max="55" value="22" style="width:100%;">
+          </div>
+        </div>
+        <canvas id="trigCalcCanvas" width="460" height="175" style="width:100%;height:175px;background:#050911;border:1px solid #1c2b45;border-radius:5px;"></canvas>
+        <div id="trigCalcOut" style="margin-top:8px;font-family:monospace;font-size:12.5px;color:#e2e8f0;background:#0c172a;padding:8px;border-radius:4px;border-left:3px solid #4ade80;"></div>
+      </div>
+
+      <!-- WIDGET 2: INTERACTIVE +30° CEPHALAD PARALLAX VISUALIZER -->
+      <div style="background:#080f1d;border:1px solid #1e3a5f;border-radius:6px;padding:14px;">
+        <h3 style="margin-top:0;color:#38bdf8;">Interactive +30° Cephalad Parallax Visualizer</h3>
+        <p style="font-size:12.5px;color:#94a3b8;">Click the 3 depth scenarios below to see why <b>0° AP</b> looks identical in all three, while <b>+30° Cephalad Tilt</b> exposes depth error:</p>
+        <div style="display:flex;gap:6px;margin:10px 0;">
+          <button id="pxBtnShallow" style="flex:1;padding:7px;background:#1e293b;color:#fde047;border:1px solid #f59e0b;border-radius:4px;cursor:pointer;font-weight:700;font-size:11.5px;">1. Too Shallow (Post.)</button>
+          <button id="pxBtnExact" style="flex:1;padding:7px;background:#15803d;color:#fff;border:1px solid #4ade80;border-radius:4px;cursor:pointer;font-weight:700;font-size:11.5px;">2. On-Target (Papilla)</button>
+          <button id="pxBtnDeep" style="flex:1;padding:7px;background:#1e293b;color:#fca5a5;border:1px solid #ef4444;border-radius:4px;cursor:pointer;font-weight:700;font-size:11.5px;">3. Too Deep (Ant.)</button>
+        </div>
+        <canvas id="parallaxDemoCanvas" width="460" height="205" style="width:100%;height:205px;background:#050911;border:1px solid #1c2b45;border-radius:5px;"></canvas>
+        <div id="parallaxDemoText" style="margin-top:8px;font-size:12.2px;color:#cbd5e1;background:#0c172a;padding:8px;border-radius:4px;border-left:3px solid #38bdf8;"></div>
+      </div>
+    </div>
+
+    <!-- COMPLETE 10-CASE / 40-CALYX SURGICAL ENCYCLOPEDIA -->
+    <h3 style="color:#fde047;font-size:16.5px;margin-bottom:10px;">Complete Case-by-Case &amp; Calyx-by-Calyx Reference Encyclopedia (Cases 1–10)</h3>
+    <div id="caseEncyclopediaList" style="display:flex;flex-direction:column;gap:18px;"></div>
+  `;
+
+  // --------------------------------------------------------------------------
+  // 1. LIVE POINT B & PITCH CALCULATOR LOGIC
+  // --------------------------------------------------------------------------
+  const slZ = document.getElementById('gSlZ');
+  const slAx = document.getElementById('gSlAx');
+  const slCor = document.getElementById('gSlCor');
+  const tCanvas = document.getElementById('trigCalcCanvas');
+  const tOut = document.getElementById('trigCalcOut');
+
+  function updateTrigCalc() {
+    const z = parseFloat(slZ.value);
+    const ax = parseFloat(slAx.value);
+    const cor = parseFloat(slCor.value);
+    document.getElementById('gValZ').textContent = `${z} mm`;
+    document.getElementById('gValAx').textContent = `${ax}°`;
+    document.getElementById('gValCor').textContent = `${cor >= 0 ? '+' : ''}${cor}°`;
+
+    const dSurf = z * Math.tan(ax * Math.PI / 180);
+    const latCm = (dSurf * Math.cos(cor * Math.PI / 180)) / 10;
+    const ccCm = -latCm * Math.tan(cor * Math.PI / 180);
+    const surfMm = Math.hypot(latCm * 10, ccCm * 10);
+    const pitch = Math.atan2(surfMm, z) * 180 / Math.PI;
+    const tract = Math.hypot(surfMm, z);
+
+    tOut.innerHTML = `
+      <b>Optimal Point B:</b> L = <span style="color:#4ade80">${latCm.toFixed(1)} cm</span> lateral, CC = <span style="color:#fde047">${ccCm >= 0 ? '+' : ''}${ccCm.toFixed(1)} cm</span> (${ccCm < 0 ? 'caudal' : 'cranial'})<br>
+      <b>Coaxial Needle Pitch:</b> <span style="color:#38bdf8">${pitch.toFixed(1)}°</span> from vertical | <b>Total 3D Tract Length:</b> <span style="color:#f8fafc">${Math.round(tract)} mm</span>
+    `;
+
+    const ctx = tCanvas.getContext('2d');
+    const w = tCanvas.width, h = tCanvas.height;
+    ctx.clearRect(0, 0, w, h);
+
+    // Left Half: Prone Skin Map (Point A vs Point B)
+    ctx.fillStyle = '#94a3b8'; ctx.font = 'bold 10.5px sans-serif';
+    ctx.fillText('PRONE FLANK SKIN (0° AP)', 12, 16);
+    const axX = 75, axY = h * 0.55;
+    ctx.beginPath(); ctx.arc(axX, axY, 6, 0, Math.PI * 2);
+    ctx.fillStyle = '#38bdf8'; ctx.fill();
+    ctx.fillText('Point A', axX - 20, axY - 10);
+
+    const bx = axX + latCm * 22;
+    const by = axY - ccCm * 22;
+    ctx.beginPath(); ctx.moveTo(axX, axY); ctx.lineTo(bx, by);
+    ctx.strokeStyle = '#4ade80'; ctx.lineWidth = 2.5; ctx.stroke();
+
+    ctx.beginPath(); ctx.arc(bx, by, 6, 0, Math.PI * 2);
+    ctx.fillStyle = '#f59e0b'; ctx.fill();
+    ctx.fillStyle = '#fde047';
+    ctx.fillText(`Point B (${latCm.toFixed(1)}, ${ccCm >= 0 ? '+' : ''}${ccCm.toFixed(1)}cm)`, Math.min(w * 0.48 - 95, bx + 8), Math.max(28, Math.min(h - 10, by + 4)));
+
+    // Divider
+    ctx.beginPath(); ctx.moveTo(w * 0.5, 0); ctx.lineTo(w * 0.5, h);
+    ctx.strokeStyle = '#1e2f4d'; ctx.lineWidth = 1.5; ctx.stroke();
+
+    // Right Half: Axial Depth Triangle
+    ctx.fillStyle = '#94a3b8';
+    ctx.fillText('AXIAL CROSS-SECTION (DEPTH Z)', w * 0.5 + 12, 16);
+    const rx0 = w * 0.56, ry0 = 34;
+    ctx.beginPath(); ctx.moveTo(rx0, ry0); ctx.lineTo(w - 14, ry0);
+    ctx.strokeStyle = '#f59e0b'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillText('Skin (Z=0)', rx0, ry0 - 5);
+
+    const calPxX = rx0 + 35, calPxY = ry0 + z * 1.1;
+    const skinPxX = calPxX + surfMm * 1.1;
+    ctx.beginPath(); ctx.moveTo(calPxX, ry0); ctx.lineTo(calPxX, calPxY);
+    ctx.strokeStyle = 'rgba(56,189,248,0.4)'; ctx.setLineDash([3, 3]); ctx.stroke(); ctx.setLineDash([]);
+
+    ctx.beginPath(); ctx.moveTo(skinPxX, ry0); ctx.lineTo(calPxX, calPxY);
+    ctx.strokeStyle = '#fde047'; ctx.lineWidth = 2.5; ctx.stroke();
+
+    ctx.beginPath(); ctx.arc(calPxX, calPxY, 7, 0, Math.PI * 2);
+    ctx.fillStyle = '#0284c7'; ctx.fill();
+    ctx.fillStyle = '#7dd3fc';
+    ctx.fillText(`Papilla (Z=${z}mm)`, calPxX - 18, calPxY + 18);
+  }
+
+  [slZ, slAx, slCor].forEach(el => el.addEventListener('input', updateTrigCalc));
+  updateTrigCalc();
+
+  // --------------------------------------------------------------------------
+  // 2. INTERACTIVE +30° CEPHALAD PARALLAX VISUALIZER LOGIC
+  // --------------------------------------------------------------------------
+  let pxMode = 'exact';
+  const pCanvas = document.getElementById('parallaxDemoCanvas');
+  const pText = document.getElementById('parallaxDemoText');
+
+  function drawParallaxDemo() {
+    const ctx = pCanvas.getContext('2d');
+    const w = pCanvas.width, h = pCanvas.height;
+    ctx.clearRect(0, 0, w, h);
+
+    // Left: 0° AP View (All 3 look centered on the calyx!)
+    ctx.fillStyle = '#94a3b8'; ctx.font = 'bold 10.5px sans-serif';
+    ctx.fillText('VIEW 1: 0° AP (VERTICAL BEAM)', 14, 18);
+    ctx.fillStyle = '#64748b'; ctx.font = '10px sans-serif';
+    ctx.fillText('Illusion: Tip looks on-target in all 3!', 14, 32);
+
+    const c1x = w * 0.24, c1y = h * 0.56;
+    ctx.beginPath(); ctx.arc(c1x, c1y, 16, 0, Math.PI * 2);
+    ctx.fillStyle = '#1e293b'; ctx.fill();
+    ctx.lineWidth = 2; ctx.strokeStyle = '#38bdf8'; ctx.stroke();
+
+    // Needle on 0° AP
+    ctx.beginPath(); ctx.moveTo(c1x + 65, c1y + 32); ctx.lineTo(c1x, c1y);
+    ctx.lineWidth = 3; ctx.strokeStyle = '#facc15'; ctx.stroke();
+    ctx.beginPath(); ctx.arc(c1x, c1y, 4, 0, Math.PI * 2);
+    ctx.fillStyle = '#ef4444'; ctx.fill();
+
+    // Divider
+    ctx.beginPath(); ctx.moveTo(w * 0.5, 0); ctx.lineTo(w * 0.5, h);
+    ctx.strokeStyle = '#1e2f4d'; ctx.lineWidth = 1.5; ctx.stroke();
+
+    // Right: +30° Cephalad View
+    ctx.fillStyle = '#94a3b8'; ctx.font = 'bold 10.5px sans-serif';
+    ctx.fillText('VIEW 2: +30° CEPHALAD TILT', w * 0.5 + 14, 18);
+    ctx.fillStyle = '#64748b'; ctx.font = '10px sans-serif';
+    ctx.fillText('HEAD ↑ (Top) | FEET ↓ (Bottom)', w * 0.5 + 14, 32);
+
+    const c2x = w * 0.73, c2y = h * 0.56;
+    ctx.beginPath(); ctx.arc(c2x, c2y, 16, 0, Math.PI * 2);
+    ctx.fillStyle = '#1e293b'; ctx.fill();
+    ctx.lineWidth = 2; ctx.strokeStyle = '#38bdf8'; ctx.stroke();
+
+    let shiftY = 0;
+    let col = '#4ade80';
+    if (pxMode === 'shallow') {
+      shiftY = +30; // Downward (caudal) on screen
+      col = '#fde047';
+      pText.innerHTML = `<b style="color:#fde047">1. TOO SHALLOW / SUPERFICIAL (Posterior to Calyx):</b> Because the C-arm detector is tilted toward the <b>Head (+30° Ceph)</b> looking caudally, a superficial needle tip (<span class="math">Z &lt; Z<sub>calyx</sub></span>) projects <b>DOWNWARD (Caudally)</b> below the calyx! <b>Fix:</b> Retract to fat &amp; <b>steepen Pitch</b> (smaller °).`;
+    } else if (pxMode === 'exact') {
+      shiftY = 0;
+      col = '#4ade80';
+      pText.innerHTML = `<b style="color:#4ade80">2. EXACT ON-TARGET (Inside Papilla):</b> The needle tip remains dead-center over the calyx on <b>both 0° AP and +30° Cephalad</b> views while the shaft elongates in profile. Pull stylet for clear urine efflux!`;
+    } else {
+      shiftY = -30; // Upward (cephalad) on screen
+      col = '#f87171';
+      pText.innerHTML = `<b style="color:#f87171">3. TOO DEEP / ANTERIOR OVERSHOOT:</b> On <b>+30° Cephalad</b> tilt, a needle tip that has plunged deeper/anterior to the calyx (<span class="math">Z &gt; Z<sub>calyx</sub></span>) projects <b>UPWARD (Cephalad)</b> above the calyx! <b>Fix:</b> Retract to fat &amp; <b>flatten Pitch</b> (larger °).`;
+    }
+
+    // Elongated needle on +30° Ceph
+    ctx.beginPath(); ctx.moveTo(c2x + 65, c2y + 52); ctx.lineTo(c2x, c2y + shiftY);
+    ctx.lineWidth = 3; ctx.strokeStyle = col; ctx.stroke();
+    ctx.beginPath(); ctx.arc(c2x, c2y + shiftY, 4.5, 0, Math.PI * 2);
+    ctx.fillStyle = col; ctx.fill();
+  }
+
+  document.getElementById('pxBtnShallow').onclick = () => { pxMode = 'shallow'; drawParallaxDemo(); };
+  document.getElementById('pxBtnExact').onclick = () => { pxMode = 'exact'; drawParallaxDemo(); };
+  document.getElementById('pxBtnDeep').onclick = () => { pxMode = 'deep'; drawParallaxDemo(); };
+  drawParallaxDemo();
+
+  // --------------------------------------------------------------------------
+  // 3. GENERATE COMPLETE 10-CASE / 40-CALYX ENCYCLOPEDIA FROM cases.js
+  // --------------------------------------------------------------------------
+  const listEl = document.getElementById('caseEncyclopediaList');
+  if (typeof CASES !== 'undefined' && listEl) {
+    listEl.innerHTML = CASES.map((c, idx) => {
+      const pb = c.profPlaybook || { trap: '', trick: '', steps: [] };
+      const cleanTrick = (pb.trick || '').replace(/PROFESSOR'S TRICK\s*[—-]\s*/i, '');
+
+      const calyxRows = Object.keys(c.calyces).map(k => {
+        const res = calcIdealForCalyx(c, k);
+        const isBest = k === c.defaultCalyx;
+        return `
+          <tr style="${isBest ? 'background:rgba(74,222,128,0.07);' : ''}">
+            <td>
+              <b style="color:${isBest ? '#4ade80' : '#e2e8f0'}">${res.cal.label}</b>
+              ${isBest ? '<br><span style="color:#4ade80;font-size:11px;font-weight:800;">★ RECOMMENDED PRIMARY</span>' : ''}
+            </td>
+            <td><b>${res.cal.reachPct}%</b><br><span style="color:#94a3b8;font-size:11.5px;">Neck: ${res.cal.neckW}mm | Z: ${res.cal.z}mm</span></td>
+            <td style="font-family:monospace;font-size:12px;">
+              <b>Resp:</b> ${res.resp}<br>
+              <b>Point B:</b> L=${res.latCm.toFixed(1)}cm, CC=${res.ccCm >= 0 ? '+' : ''}${res.ccCm.toFixed(1)}cm<br>
+              <b>Coronal:</b> ${res.corDeg.toFixed(1)}° | <b>Pitch:</b> ${res.pitchDeg.toFixed(1)}°<br>
+              <b>3D Tract:</b> ${res.tractMm} mm
+            </td>
+            <td style="font-size:12.5px;">${res.cal.calyxNote || ''}</td>
+          </tr>
+        `;
+      }).join('');
+
+      return `
+        <div style="background:#080e1a;border:1px solid #1e3a5f;border-radius:7px;padding:16px 18px;">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;border-bottom:1px solid #1c2b45;padding-bottom:8px;margin-bottom:10px;">
+            <h4 style="color:#38bdf8;font-size:15.5px;margin:0;">${c.name}</h4>
+            <span style="color:#4ade80;font-size:12px;font-weight:700;">Primary Target: ${c.calyces[c.defaultCalyx].label} (${c.calyces[c.defaultCalyx].reachPct}% Reach)</span>
+          </div>
+          <p style="font-size:13.2px;margin-bottom:8px;"><b>Clinical Scenario:</b> ${c.clinicalBrief || ''}</p>
+          <div class="grid-2" style="margin:8px 0;">
+            <div class="callout-warn" style="margin:0;font-size:12.8px;"><b>⚠️ Anatomical Trap:</b> ${pb.trap}</div>
+            <div class="callout-ok" style="margin:0;font-size:12.8px;"><b>💡 Key Surgical Trick:</b> ${cleanTrick}</div>
+          </div>
+          <div style="margin:10px 0;font-size:12.8px;background:#0b1528;padding:10px 14px;border-radius:5px;border:1px solid #1c2b45;">
+            <b style="color:#fde047;">Step-by-Step Solution for Primary Target:</b>
+            <div style="margin-top:4px;display:flex;flex-direction:column;gap:3px;">
+              ${(pb.steps || []).map(s => `<div>${s}</div>`).join('')}
+            </div>
+          </div>
+          <table style="margin-top:10px;margin-bottom:0;">
+            <thead>
+              <tr>
+                <th style="width:22%;">Calyx Option</th>
+                <th style="width:14%;">Reach &amp; Neck</th>
+                <th style="width:26%;">Exact Point B &amp; Angles</th>
+                <th style="width:38%;">Surgical Verdict &amp; Why</th>
+              </tr>
+            </thead>
+            <tbody>${calyxRows}</tbody>
+          </table>
+        </div>
+      `;
+    }).join('');
+  }
+})();
+// === END OF FILE guide-cases.js ===
