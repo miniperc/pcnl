@@ -228,7 +228,9 @@ function buildAutoSolutionSteps() {
   const opt = computeOptimalGeometryForTechnique(tech);
   const modeSel = document.getElementById('errorScenarioSelect');
   const scenarioMode = modeSel ? modeSel.value : 'auto_smart';
-  const techTitle = tech === 'hybrid' ? `HYBRID (0° + ${opt.calyxAxDeg}° + CEPH)` : (tech === 'triangulation' ? 'TRIANGULATION' : `BULL'S EYE`);
+  const techTitle = tech === 'hybrid'
+    ? `HYBRID (0° LINE → ${opt.calyxAxDeg}° IPSILATERAL → 0° AP DEPTH)`
+    : (tech === 'triangulation' ? 'BIPLANAR TRIANGULATION (0° AP + 30° CEPH)' : `PURE ${opt.calyxAxDeg}° BULL'S EYE`);
   const steps = [];
 
   const getDepthAtCalyxX = (pDeg, cDeg, latMm) => {
@@ -252,44 +254,64 @@ function buildAutoSolutionSteps() {
     steps.push({ title: `DEMO 3: CORONAL DOG-LEG DRIFT`, techLabel: `PLANE 1 ERROR`, duration: 4.5, target: { respMode: opt.respMode, cArmAx: 0, cArmOb: 0, latCm: opt.latCm, ccCm: 0.0, corDeg: opt.corDeg - 25, pitchDeg: opt.pitchDeg, depthMm: 45 }, narration: `Entering off the 0° infundibular line creates a severe dog-leg kink!` });
     steps.push({ title: `DEMO 3: RETRACT & REALIGN ON 0° AP`, techLabel: `PLANE 1 FIX`, duration: 4.2, target: { cArmAx: 0, cArmOb: 0, latCm: opt.latCm, ccCm: opt.ccCm, corDeg: opt.corDeg, pitchDeg: opt.pitchDeg, depthMm: 15 }, narration: `Retracting to fat and aligning Point B (<b>CC=${opt.ccCm}cm</b>) and Coronal Aim (<b>${opt.corDeg}°</b>).` });
   } else if (scenarioMode === 'err_bullseye') {
-    steps.push({ title: `DEMO 4: BULL'S EYE COAXIAL DRIFT`, techLabel: `OBLIQUE DRIFT`, duration: 4.5, target: { respMode: opt.respMode, cArmAx: opt.trueAxDeg, cArmOb: opt.trueObDeg, latCm: opt.latCm, ccCm: opt.ccCm, corDeg: opt.corDeg + 14, pitchDeg: opt.pitchDeg - 9, depthMm: 22 }, narration: `At the coaxial C-arm angle (<b>${opt.trueAxDeg}° Ax, ${opt.trueObDeg}° Tilt</b>), hub drift turns the dot into a line.` });
+    steps.push({ title: `DEMO 4: BULL'S EYE COAXIAL DRIFT`, techLabel: `OBLIQUE DRIFT`, duration: 4.5, target: { respMode: opt.respMode, cArmAx: opt.trueAxDeg, cArmOb: 0, latCm: opt.latCm, ccCm: opt.ccCm, corDeg: opt.corDeg + 14, pitchDeg: opt.pitchDeg - 9, depthMm: 22 }, narration: `At <b>${opt.trueAxDeg}° Ipsilateral</b>, hub drift turns the Bull's Eye dot into a line.` });
   }
 
-  // Step A: 0° AP View — Lock Respiration & Plane 1 Infundibular Line
-  steps.push({
-    title: `0° AP VIEW: RESPIRATION & PLANE 1 LINE`, techLabel: techTitle, duration: 4.5,
-    target: { respMode: opt.respMode, cArmAx: 0, cArmOb: 0, latCm: opt.latCm, ccCm: opt.ccCm, corDeg: opt.corDeg, pitchDeg: opt.pitchDeg, depthMm: 3 },
-    narration: cal.supracostal
-      ? `<b>0° AP View:</b> Locking <b>Exp Hold</b> and placing Point B at <b>L=${opt.latCm}cm, CC=${opt.ccCm >= 0 ? '+' : ''}${opt.ccCm}cm</b> on the upper border of the 12th rib.`
-      : `<b>0° AP View:</b> Locking <b>Insp Hold</b> and aligning Point B (<b>L=${opt.latCm}cm, CC=${opt.ccCm}cm</b>) along the <b>${opt.corDeg}°</b> infundibular line.`
-  });
-
-  // Step B: Rotate C-Arm to Coaxial Bull's Eye (+30° Axial) & Cross Fascia
-  steps.push({
-    title: `ROTATE C-ARM TO ${opt.trueAxDeg}° BULL'S EYE & POP FASCIA`, techLabel: techTitle, duration: 4.8,
-    target: { cArmAx: opt.trueAxDeg, cArmOb: opt.trueObDeg, latCm: opt.latCm, ccCm: opt.ccCm, corDeg: opt.corDeg, pitchDeg: opt.pitchDeg, depthMm: opt.fasciaDepthMm + 4 },
-    narration: `<b>Rotating C-Arm to ${opt.trueAxDeg}° Axial (${opt.trueObDeg}° Tilt):</b> Looking straight down the needle barrel (hub ring over tip) while punching through the <b>Lumbodorsal Fascia (${opt.fasciaDepthMm} mm) [1st Pop]</b>.`
-  });
-
-  // Step C: Swing C-Arm to +30° Cephalad Oblique for Depth Parallax Check
-  steps.push({
-    title: `SWING C-ARM TO +30° CEPHALAD FOR DEPTH PARALLAX`, techLabel: techTitle, duration: 4.8,
-    target: { cArmAx: 0, cArmOb: 30, latCm: opt.latCm, ccCm: opt.ccCm, corDeg: opt.corDeg, pitchDeg: opt.pitchDeg, depthMm: opt.tractDistMm - 10 },
-    narration: `<b>Swinging C-Arm to +30° Cephalad Tilt:</b> Elongating the needle shaft in profile to verify our <b>${opt.pitchDeg}° Pitch</b> aims dead-center at the calyx depth (${opt.tractDistMm - 10} mm).`
-  });
-
-  // Step D: Return to 0° AP — Watch Dimple & Pop into Papilla
-  steps.push({
-    title: `0° AP VIEW: CAPSULAR DIMPLE & PAPILLARY ENTRY [2ND POP]`, techLabel: techTitle, duration: 4.5,
-    target: { cArmAx: 0, cArmOb: 0, latCm: opt.latCm, ccCm: opt.ccCm, corDeg: opt.corDeg, pitchDeg: opt.pitchDeg, depthMm: opt.tractDistMm },
-    onArrive: () => { pullStylet(true); },
-    narration: `<b>Returning C-Arm to 0° AP:</b> Watch the calyceal contrast cup indent (dimple sign) as the tip pops into the papilla at <b>${opt.tractDistMm} mm</b> (Dog-leg: <b>${opt.dogLegDeg.toFixed(1)}°</b>)!`
-  });
+  // TECHNIQUE-SPECIFIC WORKFLOWS
+  if (tech === 'hybrid') {
+    // HYBRID: 0° AP Line -> 30° Ipsilateral Only (No Ceph Tilt!) -> 0° AP Depth & Pop
+    steps.push({
+      title: `0° AP VIEW: MARK INFUNDIBULAR LINE & POINT B`, techLabel: techTitle, duration: 4.5,
+      target: { respMode: opt.respMode, cArmAx: 0, cArmOb: 0, latCm: opt.latCm, ccCm: opt.ccCm, corDeg: opt.corDeg, pitchDeg: opt.pitchDeg, depthMm: 3 },
+      narration: `<b>0° AP View:</b> Locking <b>${opt.respMode === 'exp' ? 'Exp Hold' : 'Insp Hold'}</b> and aligning Point B (<b>L=${opt.latCm}cm, CC=${opt.ccCm >= 0 ? '+' : ''}${opt.ccCm}cm</b>) along the <b>${opt.corDeg}°</b> infundibular axis.`
+    });
+    steps.push({
+      title: `ROTATE C-ARM TO +${opt.calyxAxDeg}° IPSILATERAL (BULL'S EYE)`, techLabel: techTitle, duration: 4.8,
+      target: { cArmAx: opt.calyxAxDeg, cArmOb: 0, latCm: opt.latCm, ccCm: opt.ccCm, corDeg: opt.corDeg, pitchDeg: opt.pitchDeg, depthMm: opt.fasciaDepthMm + 6 },
+      narration: `<b>+${opt.calyxAxDeg}° Ipsilateral Oblique (0° Tilt):</b> Looking end-on into the posterior calyx, locking Needle Pitch at <b>${opt.pitchDeg}°</b>, and punching through the <b>Lumbodorsal Fascia (${opt.fasciaDepthMm} mm) [1st Pop]</b>.`
+    });
+    steps.push({
+      title: `RETURN TO 0° AP VIEW: ADVANCE & WATCH CALYCEAL DIMPLE`, techLabel: techTitle, duration: 4.8,
+      target: { cArmAx: 0, cArmOb: 0, latCm: opt.latCm, ccCm: opt.ccCm, corDeg: opt.corDeg, pitchDeg: opt.pitchDeg, depthMm: opt.tractDistMm },
+      onArrive: () => { pullStylet(true); },
+      narration: `<b>Back to 0° AP View:</b> Advancing along the infundibular line to <b>${opt.tractDistMm} mm</b>, watching the contrast cup dimple, and popping dead-center into the papilla (Dog-leg: <b>${opt.dogLegDeg.toFixed(1)}°</b>)!`
+    });
+  } else if (tech === 'triangulation') {
+    // CLASSIC BIPLANAR TRIANGULATION: 0° AP Line -> +30° Cephalad Tilt -> 0° AP Pop
+    steps.push({
+      title: `PLANE 1 (0° AP VIEW): LOCK CORONAL LINE & CROSS FASCIA`, techLabel: techTitle, duration: 4.5,
+      target: { respMode: opt.respMode, cArmAx: 0, cArmOb: 0, latCm: opt.latCm, ccCm: opt.ccCm, corDeg: opt.corDeg, pitchDeg: opt.pitchDeg, depthMm: opt.fasciaDepthMm + 4 },
+      narration: `<b>Plane 1 (0° AP):</b> Aligning Point B (<b>L=${opt.latCm}cm, CC=${opt.ccCm}cm</b>) and Coronal Aim (<b>${opt.corDeg}°</b>) with the infundibulum, then crossing the fascia (${opt.fasciaDepthMm} mm).`
+    });
+    steps.push({
+      title: `PLANE 2 (+30° CEPHALAD TILT): PARALLAX DEPTH CHECK`, techLabel: techTitle, duration: 4.8,
+      target: { cArmAx: 0, cArmOb: 30, latCm: opt.latCm, ccCm: opt.ccCm, corDeg: opt.corDeg, pitchDeg: opt.pitchDeg, depthMm: opt.tractDistMm - 8 },
+      narration: `<b>Plane 2 (+30° Cephalad Tilt):</b> Tilting C-arm cephalad elongates the needle in profile to verify our <b>${opt.pitchDeg}° Pitch</b> aims directly at the calyx depth.`
+    });
+    steps.push({
+      title: `ENTER PAPILLA [2ND POP] & VERIFY ON 0° AP`, techLabel: techTitle, duration: 4.5,
+      target: { cArmAx: 0, cArmOb: 0, latCm: opt.latCm, ccCm: opt.ccCm, corDeg: opt.corDeg, pitchDeg: opt.pitchDeg, depthMm: opt.tractDistMm },
+      onArrive: () => { pullStylet(true); },
+      narration: `<b>Popping into Papilla (${opt.tractDistMm} mm):</b> Confirmed on both 0° AP and +30° Ceph views!`
+    });
+  } else {
+    // PURE BULL'S EYE: Start at +30° Ipsilateral -> 0° AP Depth Check
+    steps.push({
+      title: `+${opt.calyxAxDeg}° IPSILATERAL BULL'S EYE: HUB-OVER-TIP DOT`, techLabel: techTitle, duration: 4.8,
+      target: { respMode: opt.respMode, cArmAx: opt.calyxAxDeg, cArmOb: 0, latCm: opt.latCm, ccCm: 0, corDeg: 0, pitchDeg: opt.pitchDeg, depthMm: opt.fasciaDepthMm + 8 },
+      narration: `<b>+${opt.calyxAxDeg}° Ipsilateral Coaxial View:</b> Superimposing the needle hub directly over the tip (<b>◎</b> dot) and advancing through the fascia (${opt.fasciaDepthMm} mm).`
+    });
+    steps.push({
+      title: `SWING TO 0° AP VIEW: JUDGE DEPTH & ENTER PAPILLA`, techLabel: techTitle, duration: 4.8,
+      target: { cArmAx: 0, cArmOb: 0, latCm: opt.latCm, ccCm: 0, corDeg: 0, pitchDeg: opt.pitchDeg, depthMm: opt.tractDistMm },
+      onArrive: () => { pullStylet(true); },
+      narration: `<b>0° AP Depth View:</b> Advancing to <b>${opt.tractDistMm} mm</b> until the calyceal cup dimples and pops (Note: Pure Bull's Eye at 0° coronal leaves a <b>${opt.dogLegDeg.toFixed(1)}°</b> coronal dog-leg).`
+    });
+  }
 
   steps.forEach((s, idx) => { s.title = `STEP ${idx + 1}/${steps.length}: ${s.title}`; });
   return steps;
 }
-
 function toggleAutoSolve() {
   if (state.autoPlaying) { stopAutoSolve(false); return; }
   const isFinished = state.autoSteps.length > 0 && state.autoStepIdx >= state.autoSteps.length - 1 && state.autoStepTimer >= state.autoSteps[state.autoStepIdx].duration;
