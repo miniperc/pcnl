@@ -235,36 +235,173 @@ function buildAutoSolutionSteps() {
 
   const getDepthAtCalyxX = (pDeg, cDeg, latMm) => {
     const dxUnit = Math.sin(pDeg * Math.PI / 180) * Math.cos(cDeg * Math.PI / 180);
-    return Math.min(125, Math.max(35, Math.round(latMm / Math.max(0.2, dxUnit))));
+    return Math.min(125, Math.max(45, Math.round(latMm / Math.max(0.2, dxUnit))));
   };
 
+  const finishSteps = () => {
+    steps.forEach((s, idx) => { s.title = `STEP ${idx + 1}/${steps.length}: ${s.title}`; });
+    return steps;
+  };
+
+  // --------------------------------------------------------------------------
+  // DEMO FIX 1: TOO SHALLOW / POSTERIOR PASS -> WITHDRAW -> REDIRECT -> REINSERT
+  // --------------------------------------------------------------------------
   if (scenarioMode === 'err_shallow') {
     const shallowPitch = Math.min(55, opt.pitchDeg + 12);
     const apD = getDepthAtCalyxX(shallowPitch, opt.corDeg, opt.latCm * 10);
-    steps.push({ title: `DEMO 1: SHALLOW PASS ON 0° AP`, techLabel: `DEPTH ILLUSION`, duration: 4.5, target: { respMode: opt.respMode, cArmAx: 0, cArmOb: 0, latCm: opt.latCm, ccCm: opt.ccCm, corDeg: opt.corDeg, pitchDeg: shallowPitch, depthMm: apD }, narration: `On <b>0° AP</b>, Pitch (<b>${shallowPitch.toFixed(1)}°</b>) is too flat—passing superficially behind the calyx!` });
-    steps.push({ title: `DEMO 1: SWING C-ARM TO +30° CEPH`, techLabel: `PARALLAX CHECK`, duration: 4.8, target: { cArmAx: 0, cArmOb: 30, pitchDeg: shallowPitch, depthMm: apD }, narration: `Swinging C-arm to <b>+30° Cephalad</b> elongates the needle and shows the superficial tip projecting <b>downward (caudally)</b>!` });
-    steps.push({ title: `DEMO 1: RETRACT TO FAT & STEEPEN PITCH`, techLabel: `SAFE PIVOT FIX`, duration: 4.2, target: { cArmAx: 0, cArmOb: 30, pitchDeg: opt.pitchDeg, depthMm: 18 }, narration: `Retracting to <b>18 mm (Subcutaneous Fat)</b> before steepening Pitch to <b>${opt.pitchDeg.toFixed(1)}°</b>.` });
-  } else if (scenarioMode === 'err_deep') {
-    const deepPitch = Math.max(12, opt.pitchDeg - 9.5);
-    const apD = getDepthAtCalyxX(deepPitch, opt.corDeg, opt.latCm * 10);
-    steps.push({ title: `DEMO 2: DEEP OVERSHOOT ON 0° AP`, techLabel: `ANTERIOR TRAP`, duration: 4.5, target: { respMode: opt.respMode, cArmAx: 0, cArmOb: 0, latCm: opt.latCm, ccCm: opt.ccCm, corDeg: opt.corDeg, pitchDeg: deepPitch, depthMm: apD }, narration: `Pitch (<b>${deepPitch.toFixed(1)}°</b>) is too steep—plunging anteriorly past the posterior calyx!` });
-    steps.push({ title: `DEMO 2: SWING C-ARM TO +30° CEPH`, techLabel: `PARALLAX CHECK`, duration: 4.8, target: { cArmAx: 0, cArmOb: 30, pitchDeg: deepPitch, depthMm: apD }, narration: `Swinging C-arm to <b>+30° Cephalad</b> reveals the deep tip projecting <b>upward (cephalad)</b> above the calyx!` });
-    steps.push({ title: `DEMO 2: RETRACT TO FAT & FLATTEN PITCH`, techLabel: `SAFE PIVOT FIX`, duration: 4.2, target: { cArmAx: 0, cArmOb: 30, pitchDeg: opt.pitchDeg, depthMm: 18 }, narration: `Retracting to <b>18 mm</b> before flattening Pitch to <b>${opt.pitchDeg.toFixed(1)}°</b>.` });
-  } else if (scenarioMode === 'err_coronal') {
-    steps.push({ title: `DEMO 3: CORONAL DOG-LEG DRIFT`, techLabel: `PLANE 1 ERROR`, duration: 4.5, target: { respMode: opt.respMode, cArmAx: 0, cArmOb: 0, latCm: opt.latCm, ccCm: 0.0, corDeg: opt.corDeg - 25, pitchDeg: opt.pitchDeg, depthMm: 45 }, narration: `Entering off the 0° infundibular line creates a severe dog-leg kink!` });
-    steps.push({ title: `DEMO 3: RETRACT & REALIGN ON 0° AP`, techLabel: `PLANE 1 FIX`, duration: 4.2, target: { cArmAx: 0, cArmOb: 0, latCm: opt.latCm, ccCm: opt.ccCm, corDeg: opt.corDeg, pitchDeg: opt.pitchDeg, depthMm: 15 }, narration: `Retracting to fat and aligning Point B (<b>CC=${opt.ccCm}cm</b>) and Coronal Aim (<b>${opt.corDeg}°</b>).` });
-  } else if (scenarioMode === 'err_bullseye') {
-    steps.push({ title: `DEMO 4: BULL'S EYE COAXIAL DRIFT`, techLabel: `OBLIQUE DRIFT`, duration: 4.5, target: { respMode: opt.respMode, cArmAx: opt.trueAxDeg, cArmOb: 0, latCm: opt.latCm, ccCm: opt.ccCm, corDeg: opt.corDeg + 14, pitchDeg: opt.pitchDeg - 9, depthMm: 22 }, narration: `At <b>${opt.trueAxDeg}° Ipsilateral</b>, hub drift turns the Bull's Eye dot into a line.` });
+    steps.push({
+      title: `ADVANCE DEEP WITH SHALLOW PITCH (${shallowPitch.toFixed(1)}°)`, techLabel: `DEMO 1: SHALLOW ERROR`, duration: 4.5,
+      target: { respMode: opt.respMode, cArmAx: 0, cArmOb: 0, latCm: opt.latCm, ccCm: opt.ccCm, corDeg: opt.corDeg, pitchDeg: shallowPitch, depthMm: apD },
+      narration: `<b>Phase 1 (The 0° AP Illusion):</b> Advancing to <b>${apD} mm</b> with a Pitch that is too flat (<b>${shallowPitch.toFixed(1)}°</b> vs ideal <b>${opt.pitchDeg.toFixed(1)}°</b>). On 0° AP, the tip looks centered over the calyx, but it is actually passing superficially behind the kidney!`
+    });
+    steps.push({
+      title: `TILT C-ARM TO +30° CEPHALAD TO EXPOSE PARALLAX`, techLabel: `DEMO 1: PARALLAX DIAGNOSIS`, duration: 4.5,
+      target: { cArmAx: 0, cArmOb: 30, pitchDeg: shallowPitch, depthMm: apD },
+      narration: `<b>Phase 2 (Exposing the Error):</b> Tilting C-arm to <b>+30° Cephalad</b> elongates the needle and shows the superficial tip projecting <b>downward (caudally)</b> below the target calyx!`
+    });
+    steps.push({
+      title: `WITHDRAW NEEDLE STRAIGHT BACK TO 18 MM (KEEP ANGLE!)`, techLabel: `DEMO 1: SAFE WITHDRAWAL`, duration: 4.0,
+      target: { cArmAx: 0, cArmOb: 30, pitchDeg: shallowPitch, depthMm: 18 },
+      narration: `<b>Phase 3 (Withdraw Before Pivoting):</b> Pulling the needle straight back from <b>${apD} mm → 18 mm (Subcutaneous Fat)</b> while keeping Pitch constant (${shallowPitch.toFixed(1)}°) so we don't slice the kidney or bend the shaft at the fascia!`
+    });
+    steps.push({
+      title: `REDIRECT (STEEPEN PITCH) WHILE IN SUBCUTANEOUS FAT`, techLabel: `DEMO 1: SAFE REDIRECTION`, duration: 3.8,
+      target: { cArmAx: 0, cArmOb: 30, pitchDeg: opt.pitchDeg, depthMm: 18 },
+      narration: `<b>Phase 4 (Redirect at 18 mm):</b> Now that the tip is above the lumbodorsal fascia, we safely raise the hub to steepen Pitch from <b>${shallowPitch.toFixed(1)}° → ${opt.pitchDeg.toFixed(1)}°</b>.`
+    });
+    steps.push({
+      title: `RE-INSERT COAXIALLY INTO PAPILLA (${opt.tractDistMm} MM)`, techLabel: `DEMO 1: RE-INSERTION`, duration: 4.8,
+      target: { cArmAx: 0, cArmOb: 0, pitchDeg: opt.pitchDeg, depthMm: opt.tractDistMm },
+      onArrive: () => { pullStylet(true); },
+      narration: `<b>Phase 5 (Re-Insert &amp; Pop):</b> Advancing along the corrected <b>${opt.pitchDeg.toFixed(1)}°</b> trajectory through a fresh fascial track straight into the center of the papilla (<b>${opt.tractDistMm} mm</b>)!`
+    });
+    return finishSteps();
   }
 
-  // TECHNIQUE-SPECIFIC WORKFLOWS
-  if (tech === 'hybrid') {
-    // HYBRID: 0° AP Line -> 30° Ipsilateral Only (No Ceph Tilt!) -> 0° AP Depth & Pop
+  // --------------------------------------------------------------------------
+  // DEMO FIX 2: TOO DEEP / ANTERIOR OVERSHOOT -> WITHDRAW -> REDIRECT -> REINSERT
+  // --------------------------------------------------------------------------
+  if (scenarioMode === 'err_deep') {
+    const deepPitch = Math.max(12, opt.pitchDeg - 9.5);
+    const apD = getDepthAtCalyxX(deepPitch, opt.corDeg, opt.latCm * 10);
     steps.push({
-      title: `0° AP VIEW: MARK INFUNDIBULAR LINE & POINT B`, techLabel: techTitle, duration: 4.5,
-      target: { respMode: opt.respMode, cArmAx: 0, cArmOb: 0, latCm: opt.latCm, ccCm: opt.ccCm, corDeg: opt.corDeg, pitchDeg: opt.pitchDeg, depthMm: 3 },
-      narration: `<b>0° AP View:</b> Locking <b>${opt.respMode === 'exp' ? 'Exp Hold' : 'Insp Hold'}</b> and aligning Point B (<b>L=${opt.latCm}cm, CC=${opt.ccCm >= 0 ? '+' : ''}${opt.ccCm}cm</b>) along the <b>${opt.corDeg}°</b> infundibular axis.`
+      title: `ADVANCE DEEP WITH STEEP PITCH (${deepPitch.toFixed(1)}°)`, techLabel: `DEMO 2: DEEP OVERSHOOT`, duration: 4.5,
+      target: { respMode: opt.respMode, cArmAx: 0, cArmOb: 0, latCm: opt.latCm, ccCm: opt.ccCm, corDeg: opt.corDeg, pitchDeg: deepPitch, depthMm: apD },
+      narration: `<b>Phase 1 (The 0° AP Illusion):</b> Advancing to <b>${apD} mm</b> with a Pitch that is too vertical/steep (<b>${deepPitch.toFixed(1)}°</b> vs ideal <b>${opt.pitchDeg.toFixed(1)}°</b>). On 0° AP it looks centered, but it has plunged deep (anterior) to the posterior calyx!`
     });
+    steps.push({
+      title: `TILT C-ARM TO +30° CEPHALAD TO EXPOSE PARALLAX`, techLabel: `DEMO 2: PARALLAX DIAGNOSIS`, duration: 4.5,
+      target: { cArmAx: 0, cArmOb: 30, pitchDeg: deepPitch, depthMm: apD },
+      narration: `<b>Phase 2 (Exposing the Error):</b> On <b>+30° Cephalad</b> tilt, the overly deep (anterior) needle tip projects <b>upward (cephalad)</b> above the target calyceal cup!`
+    });
+    steps.push({
+      title: `WITHDRAW NEEDLE STRAIGHT BACK TO 18 MM (KEEP ANGLE!)`, techLabel: `DEMO 2: SAFE WITHDRAWAL`, duration: 4.0,
+      target: { cArmAx: 0, cArmOb: 30, pitchDeg: deepPitch, depthMm: 18 },
+      narration: `<b>Phase 3 (Withdraw Before Pivoting):</b> Pulling straight back from <b>${apD} mm → 18 mm (Subcutaneous Fat)</b> before changing angle so the beveled tip doesn't lacerate the cortex.`
+    });
+    steps.push({
+      title: `REDIRECT (FLATTEN PITCH) WHILE IN SUBCUTANEOUS FAT`, techLabel: `DEMO 2: SAFE REDIRECTION`, duration: 3.8,
+      target: { cArmAx: 0, cArmOb: 30, pitchDeg: opt.pitchDeg, depthMm: 18 },
+      narration: `<b>Phase 4 (Redirect at 18 mm):</b> Lowering the hub in subcutaneous fat to flatten Pitch from <b>${deepPitch.toFixed(1)}° → ${opt.pitchDeg.toFixed(1)}°</b>.`
+    });
+    steps.push({
+      title: `RE-INSERT COAXIALLY INTO PAPILLA (${opt.tractDistMm} MM)`, techLabel: `DEMO 2: RE-INSERTION`, duration: 4.8,
+      target: { cArmAx: 0, cArmOb: 0, pitchDeg: opt.pitchDeg, depthMm: opt.tractDistMm },
+      onArrive: () => { pullStylet(true); },
+      narration: `<b>Phase 5 (Re-Insert &amp; Pop):</b> Advancing from <b>18 mm → ${opt.tractDistMm} mm</b> along the corrected vector dead-center into the posterior papilla!`
+    });
+    return finishSteps();
+  }
+
+  // --------------------------------------------------------------------------
+  // DEMO FIX 3: CORONAL DOG-LEG DRIFT -> WITHDRAW -> REALIGN -> REINSERT
+  // --------------------------------------------------------------------------
+  if (scenarioMode === 'err_coronal') {
+    const badCor = Math.max(-55, opt.corDeg - 26);
+    steps.push({
+      title: `ADVANCE DEEP OFF-AXIS (CORONAL DOG-LEG KINK)`, techLabel: `DEMO 3: PLANE 1 DRIFT`, duration: 4.5,
+      target: { respMode: opt.respMode, cArmAx: 0, cArmOb: 0, latCm: opt.latCm, ccCm: 0.0, corDeg: badCor, pitchDeg: opt.pitchDeg, depthMm: 62 },
+      narration: `<b>Phase 1 (Off-Line Advancement):</b> Entering at <b>CC=0.0cm</b> and aiming at <b>${badCor.toFixed(1)}°</b> instead of along the <b>${opt.corDeg.toFixed(1)}°</b> infundibular axis creates a severe dog-leg kink!`
+    });
+    steps.push({
+      title: `WITHDRAW NEEDLE STRAIGHT BACK TO 15 MM`, techLabel: `DEMO 3: SAFE WITHDRAWAL`, duration: 3.8,
+      target: { cArmAx: 0, cArmOb: 0, latCm: opt.latCm, ccCm: 0.0, corDeg: badCor, pitchDeg: opt.pitchDeg, depthMm: 15 },
+      narration: `<b>Phase 2 (Withdraw Above Fascia):</b> Retracting straight back from <b>62 mm → 15 mm</b> to unthread the lumbodorsal fascia before changing our coronal plane.`
+    });
+    steps.push({
+      title: `REALIGN POINT B & CORONAL AIM ON 0° INFUNDIBULAR LINE`, techLabel: `DEMO 3: PLANE 1 LOCK`, duration: 4.0,
+      target: { cArmAx: 0, cArmOb: 0, latCm: opt.latCm, ccCm: opt.ccCm, corDeg: opt.corDeg, pitchDeg: opt.pitchDeg, depthMm: 15 },
+      narration: `<b>Phase 3 (Realign Plane 1):</b> Moving Point B onto the infundibular line (<b>CC=${opt.ccCm}cm</b>) and rotating Coronal Aim to <b>${opt.corDeg.toFixed(1)}°</b>.`
+    });
+    steps.push({
+      title: `RE-INSERT COAXIALLY DOWN INFUNDIBULAR AXIS (${opt.tractDistMm} MM)`, techLabel: `DEMO 3: RE-INSERTION`, duration: 4.8,
+      target: { cArmAx: 0, cArmOb: 0, latCm: opt.latCm, ccCm: opt.ccCm, corDeg: opt.corDeg, pitchDeg: opt.pitchDeg, depthMm: opt.tractDistMm },
+      onArrive: () => { pullStylet(true); },
+      narration: `<b>Phase 4 (Coaxial Entry):</b> Re-advancing to <b>${opt.tractDistMm} mm</b> with a <b>${opt.dogLegDeg.toFixed(1)}°</b> coaxial alignment!`
+    });
+    return finishSteps();
+  }
+
+  // --------------------------------------------------------------------------
+  // DEMO FIX 4: BULL'S EYE COAXIAL DRIFT -> WITHDRAW -> LOCK DOT -> REINSERT
+  // --------------------------------------------------------------------------
+  if (scenarioMode === 'err_bullseye') {
+    const offPitch = Math.max(12, opt.pitchDeg - 10);
+    const offCor = opt.corDeg + 15;
+    steps.push({
+      title: `ADVANCE WITH HUB DRIFT (BULL'S EYE TURNS INTO A LINE)`, techLabel: `DEMO 4: COAXIAL DRIFT`, duration: 4.5,
+      target: { respMode: opt.respMode, cArmAx: opt.calyxAxDeg, cArmOb: 0, latCm: opt.latCm, ccCm: opt.ccCm, corDeg: offCor, pitchDeg: offPitch, depthMm: 52 },
+      narration: `<b>Phase 1 (Loss of Coaxial Dot):</b> On the <b>+${opt.calyxAxDeg}° Ipsilateral</b> view, advancing while the hub has drifted off-axis shows an elongated needle shaft line that misses the calyx!`
+    });
+    steps.push({
+      title: `WITHDRAW BACK TO SUBCUTANEOUS FAT (18 MM)`, techLabel: `DEMO 4: SAFE WITHDRAWAL`, duration: 3.8,
+      target: { cArmAx: opt.calyxAxDeg, cArmOb: 0, corDeg: offCor, pitchDeg: offPitch, depthMm: 18 },
+      narration: `<b>Phase 2 (Withdraw Above Fascia):</b> Pulling straight back from <b>52 mm → 18 mm</b> before pivoting the hub.`
+    });
+    steps.push({
+      title: `PIVOT HUB DIRECTLY OVER TIP (RESTORE BULL'S EYE DOT ◎)`, techLabel: `DEMO 4: COAXIAL DOT LOCK`, duration: 4.0,
+      target: { cArmAx: opt.calyxAxDeg, cArmOb: 0, corDeg: opt.corDeg, pitchDeg: opt.pitchDeg, depthMm: 28 },
+      narration: `<b>Phase 3 (Lock Coaxial Dot):</b> Pivoting the hub directly over the tip until the shaft collapses into a single Bull's Eye dot (<b>◎</b>), then punching into the fascia (28 mm).`
+    });
+    steps.push({
+      title: `SWING TO 0° AP & ADVANCE INTO PAPILLA (${opt.tractDistMm} MM)`, techLabel: `DEMO 4: DEPTH & POP`, duration: 4.8,
+      target: { cArmAx: 0, cArmOb: 0, corDeg: opt.corDeg, pitchDeg: opt.pitchDeg, depthMm: opt.tractDistMm },
+      onArrive: () => { pullStylet(true); },
+      narration: `<b>Phase 4 (0° AP Depth Confirmation):</b> Swinging C-arm back to <b>0° AP</b> and advancing to <b>${opt.tractDistMm} mm</b> into the center of the papilla!`
+    });
+    return finishSteps();
+  }
+
+  // --------------------------------------------------------------------------
+  // SMART RECOVERY IF USER MANUALLY ADVANCED DEEP WITH AN ERROR
+  // --------------------------------------------------------------------------
+  const userHasDeepError = scenarioMode === 'auto_smart' && state.depthMm > 28 &&
+    (Math.abs(state.pitchDeg - opt.pitchDeg) > 2.5 || Math.abs(state.corDeg - opt.corDeg) > 4.5 || Math.hypot(state.latCm - opt.latCm, state.ccCm - opt.ccCm) > 0.5);
+
+  if (userHasDeepError) {
+    steps.push({
+      title: `WITHDRAW YOUR NEEDLE BACK TO SUBCUTANEOUS FAT (18 MM)`, techLabel: `SMART RECOVERY: WITHDRAW`, duration: 4.0,
+      target: { cArmAx: state.cArmAx, cArmOb: state.cArmOb, latCm: state.latCm, ccCm: state.ccCm, corDeg: state.corDeg, pitchDeg: state.pitchDeg, depthMm: 18 },
+      narration: `<b>Step 1 (Safe Withdrawal):</b> Your needle was at <b>${Math.round(state.depthMm)} mm</b> off-target. Pulling straight back to <b>18 mm (Subcutaneous Fat)</b> before changing angle!`
+    });
+    steps.push({
+      title: `REDIRECT TO OPTIMAL ANGLE WHILE AT 18 MM`, techLabel: `SMART RECOVERY: REDIRECT`, duration: 4.2,
+      target: { respMode: opt.respMode, cArmAx: 0, cArmOb: 0, latCm: opt.latCm, ccCm: opt.ccCm, corDeg: opt.corDeg, pitchDeg: opt.pitchDeg, depthMm: 18 },
+      narration: `<b>Step 2 (Redirect Above Fascia):</b> Adjusting Point B to <b>L=${opt.latCm}cm, CC=${opt.ccCm}cm</b>, Coronal Aim to <b>${opt.corDeg}°</b>, and Pitch to <b>${opt.pitchDeg}°</b>.`
+    });
+  }
+
+  // --------------------------------------------------------------------------
+  // STANDARD IDEAL TECHNIQUE WORKFLOWS (HYBRID / TRIANGULATION / BULL'S EYE)
+  // --------------------------------------------------------------------------
+  if (tech === 'hybrid') {
+    if (!userHasDeepError) {
+      steps.push({
+        title: `0° AP VIEW: MARK INFUNDIBULAR LINE & POINT B`, techLabel: techTitle, duration: 4.5,
+        target: { respMode: opt.respMode, cArmAx: 0, cArmOb: 0, latCm: opt.latCm, ccCm: opt.ccCm, corDeg: opt.corDeg, pitchDeg: opt.pitchDeg, depthMm: 3 },
+        narration: `<b>0° AP View:</b> Locking <b>${opt.respMode === 'exp' ? 'Exp Hold' : 'Insp Hold'}</b> and aligning Point B (<b>L=${opt.latCm}cm, CC=${opt.ccCm >= 0 ? '+' : ''}${opt.ccCm}cm</b>) along the <b>${opt.corDeg}°</b> infundibular axis.`
+      });
+    }
     steps.push({
       title: `ROTATE C-ARM TO +${opt.calyxAxDeg}° IPSILATERAL (BULL'S EYE)`, techLabel: techTitle, duration: 4.8,
       target: { cArmAx: opt.calyxAxDeg, cArmOb: 0, latCm: opt.latCm, ccCm: opt.ccCm, corDeg: opt.corDeg, pitchDeg: opt.pitchDeg, depthMm: opt.fasciaDepthMm + 6 },
@@ -277,12 +414,13 @@ function buildAutoSolutionSteps() {
       narration: `<b>Back to 0° AP View:</b> Advancing along the infundibular line to <b>${opt.tractDistMm} mm</b>, watching the contrast cup dimple, and popping dead-center into the papilla (Dog-leg: <b>${opt.dogLegDeg.toFixed(1)}°</b>)!`
     });
   } else if (tech === 'triangulation') {
-    // CLASSIC BIPLANAR TRIANGULATION: 0° AP Line -> +30° Cephalad Tilt -> 0° AP Pop
-    steps.push({
-      title: `PLANE 1 (0° AP VIEW): LOCK CORONAL LINE & CROSS FASCIA`, techLabel: techTitle, duration: 4.5,
-      target: { respMode: opt.respMode, cArmAx: 0, cArmOb: 0, latCm: opt.latCm, ccCm: opt.ccCm, corDeg: opt.corDeg, pitchDeg: opt.pitchDeg, depthMm: opt.fasciaDepthMm + 4 },
-      narration: `<b>Plane 1 (0° AP):</b> Aligning Point B (<b>L=${opt.latCm}cm, CC=${opt.ccCm}cm</b>) and Coronal Aim (<b>${opt.corDeg}°</b>) with the infundibulum, then crossing the fascia (${opt.fasciaDepthMm} mm).`
-    });
+    if (!userHasDeepError) {
+      steps.push({
+        title: `PLANE 1 (0° AP VIEW): LOCK CORONAL LINE & CROSS FASCIA`, techLabel: techTitle, duration: 4.5,
+        target: { respMode: opt.respMode, cArmAx: 0, cArmOb: 0, latCm: opt.latCm, ccCm: opt.ccCm, corDeg: opt.corDeg, pitchDeg: opt.pitchDeg, depthMm: opt.fasciaDepthMm + 4 },
+        narration: `<b>Plane 1 (0° AP):</b> Aligning Point B (<b>L=${opt.latCm}cm, CC=${opt.ccCm}cm</b>) and Coronal Aim (<b>${opt.corDeg}°</b>) with the infundibulum, then crossing the fascia (${opt.fasciaDepthMm} mm).`
+      });
+    }
     steps.push({
       title: `PLANE 2 (+30° CEPHALAD TILT): PARALLAX DEPTH CHECK`, techLabel: techTitle, duration: 4.8,
       target: { cArmAx: 0, cArmOb: 30, latCm: opt.latCm, ccCm: opt.ccCm, corDeg: opt.corDeg, pitchDeg: opt.pitchDeg, depthMm: opt.tractDistMm - 8 },
@@ -295,7 +433,6 @@ function buildAutoSolutionSteps() {
       narration: `<b>Popping into Papilla (${opt.tractDistMm} mm):</b> Confirmed on both 0° AP and +30° Ceph views!`
     });
   } else {
-    // PURE BULL'S EYE: Start at +30° Ipsilateral -> 0° AP Depth Check
     steps.push({
       title: `+${opt.calyxAxDeg}° IPSILATERAL BULL'S EYE: HUB-OVER-TIP DOT`, techLabel: techTitle, duration: 4.8,
       target: { respMode: opt.respMode, cArmAx: opt.calyxAxDeg, cArmOb: 0, latCm: opt.latCm, ccCm: 0, corDeg: 0, pitchDeg: opt.pitchDeg, depthMm: opt.fasciaDepthMm + 8 },
@@ -309,9 +446,9 @@ function buildAutoSolutionSteps() {
     });
   }
 
-  steps.forEach((s, idx) => { s.title = `STEP ${idx + 1}/${steps.length}: ${s.title}`; });
-  return steps;
+  return finishSteps();
 }
+
 function toggleAutoSolve() {
   if (state.autoPlaying) { stopAutoSolve(false); return; }
   const isFinished = state.autoSteps.length > 0 && state.autoStepIdx >= state.autoSteps.length - 1 && state.autoStepTimer >= state.autoSteps[state.autoStepIdx].duration;
