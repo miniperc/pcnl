@@ -1,5 +1,5 @@
 // ============================================================================
-// FILE: physics.js — v7.6 DYNAMIC C-ARM AUTO-SOLVE & TOP-BAR BRIEFING ENGINE
+// FILE: physics.js — v7.8 AUDITED ENGINE WITH DYNAMIC PER-CALYX/TECHNIQUE GUIDE
 // ============================================================================
 const lihCanvas = document.createElement('canvas');
 const lihCtx = lihCanvas.getContext('2d');
@@ -13,7 +13,6 @@ const bCtx = benchCanvas.getContext('2d');
 fluoroCanvas.style.touchAction = 'none';
 skinCanvas.style.touchAction = 'none';
 
-// Default Settings: Audio Pops OFF, Continuous Fluoro ON
 state.soundOn = false;
 state.contFluoro = true;
 state.assistedSnapped = false;
@@ -72,13 +71,18 @@ function getInfundibularUnitVector(cal) {
 }
 
 (function calibrateAnatomicalCases() {
-  // Remove any duplicate playbook card injected by older renderer.js
   const oldPb = document.getElementById('profPlaybookCard');
   if (oldPb) oldPb.remove();
 
   const caseSel = document.getElementById('caseSelect');
   if (caseSel && CASES.length > 0) {
     caseSel.innerHTML = CASES.map((c, idx) => `<option value="${idx}">${c.name}</option>`).join('');
+  }
+
+  // Ensure Case 2 lower_lat has true 52° visual and mathematical slope
+  if (CASES[1] && CASES[1].calyces && CASES[1].calyces.lower_lat) {
+    CASES[1].calyces.lower_lat.x = 78;
+    CASES[1].calyces.lower_lat.y = -22;
   }
 
   CASES.forEach((c, idx) => {
@@ -220,7 +224,7 @@ function initCase(idx, keepCalyx = false) {
 function resetCase() { initCase(state.caseIdx, true); }
 
 // ============================================================================
-// DYNAMIC C-ARM AUTO-SOLVE ENGINE (ROTATES C-ARM AT EVERY STEP!)
+// DYNAMIC C-ARM AUTO-SOLVE & 5-STAGE WITHDRAW-REDIRECT-REINSERT DEMO ENGINE
 // ============================================================================
 function buildAutoSolutionSteps() {
   const cal = getTargetCalyxBase();
@@ -243,9 +247,6 @@ function buildAutoSolutionSteps() {
     return steps;
   };
 
-  // --------------------------------------------------------------------------
-  // DEMO FIX 1: TOO SHALLOW / POSTERIOR PASS -> WITHDRAW -> REDIRECT -> REINSERT
-  // --------------------------------------------------------------------------
   if (scenarioMode === 'err_shallow') {
     const shallowPitch = Math.min(55, opt.pitchDeg + 12);
     const apD = getDepthAtCalyxX(shallowPitch, opt.corDeg, opt.latCm * 10);
@@ -278,9 +279,6 @@ function buildAutoSolutionSteps() {
     return finishSteps();
   }
 
-  // --------------------------------------------------------------------------
-  // DEMO FIX 2: TOO DEEP / ANTERIOR OVERSHOOT -> WITHDRAW -> REDIRECT -> REINSERT
-  // --------------------------------------------------------------------------
   if (scenarioMode === 'err_deep') {
     const deepPitch = Math.max(12, opt.pitchDeg - 9.5);
     const apD = getDepthAtCalyxX(deepPitch, opt.corDeg, opt.latCm * 10);
@@ -313,9 +311,6 @@ function buildAutoSolutionSteps() {
     return finishSteps();
   }
 
-  // --------------------------------------------------------------------------
-  // DEMO FIX 3: CORONAL DOG-LEG DRIFT -> WITHDRAW -> REALIGN -> REINSERT
-  // --------------------------------------------------------------------------
   if (scenarioMode === 'err_coronal') {
     const badCor = Math.max(-55, opt.corDeg - 26);
     steps.push({
@@ -342,9 +337,6 @@ function buildAutoSolutionSteps() {
     return finishSteps();
   }
 
-  // --------------------------------------------------------------------------
-  // DEMO FIX 4: BULL'S EYE COAXIAL DRIFT -> WITHDRAW -> LOCK DOT -> REINSERT
-  // --------------------------------------------------------------------------
   if (scenarioMode === 'err_bullseye') {
     const offPitch = Math.max(12, opt.pitchDeg - 10);
     const offCor = opt.corDeg + 15;
@@ -372,9 +364,6 @@ function buildAutoSolutionSteps() {
     return finishSteps();
   }
 
-  // --------------------------------------------------------------------------
-  // SMART RECOVERY IF USER MANUALLY ADVANCED DEEP WITH AN ERROR
-  // --------------------------------------------------------------------------
   const userHasDeepError = scenarioMode === 'auto_smart' && state.depthMm > 28 &&
     (Math.abs(state.pitchDeg - opt.pitchDeg) > 2.5 || Math.abs(state.corDeg - opt.corDeg) > 4.5 || Math.hypot(state.latCm - opt.latCm, state.ccCm - opt.ccCm) > 0.5);
 
@@ -391,9 +380,6 @@ function buildAutoSolutionSteps() {
     });
   }
 
-  // --------------------------------------------------------------------------
-  // STANDARD IDEAL TECHNIQUE WORKFLOWS (HYBRID / TRIANGULATION / BULL'S EYE)
-  // --------------------------------------------------------------------------
   if (tech === 'hybrid') {
     if (!userHasDeepError) {
       steps.push({
@@ -630,7 +616,7 @@ function setWorkbench(wb) {
   document.getElementById('wbTab5').classList.toggle('active', wb === 'compare');
   document.getElementById('wbTab2').classList.toggle('active', wb === 'ultrasound');
 }
-function toggleBlind() { state.blindMode = !state.blindMode; state.blindRevealed = false; const b = document.getElementById('blindBtn'); b.textContent = `Blind CT: ${state.blindMode ? 'ON' : 'OFF'}`; b.classList.toggle('active', state.blindMode); }
+function toggleBlind() { state.blindMode = !state.blindMode; state.blindRevealed = false; }
 function toggleContFluoro() {
   state.contFluoro = !state.contFluoro;
   if (state.contFluoro) state.lihDirty = true;
@@ -811,17 +797,18 @@ function computeDiagnostics() {
 
 function updateDiagnosticsAndCoach() {
   const d = computeDiagnostics(), c = CASES[state.caseIdx], cal = getTargetCalyxBase();
+  const opt = computeOptimalGeometryForTechnique(state.coachMode);
+
   const calSel = document.getElementById('calyxSelect');
   if (calSel) {
-    Array.from(calSel.options).forEach(opt => {
-      if (c.calyces[opt.value]) {
-        const isBest = opt.value === c.defaultCalyx ? ' ★ Best' : '';
-        opt.textContent = `Target: ${c.calyces[opt.value].label} (${c.calyces[opt.value].reachPct}% reach${isBest})`;
+    Array.from(calSel.options).forEach(o => {
+      if (c.calyces[o.value]) {
+        const isBest = o.value === c.defaultCalyx ? ' ★ Best' : '';
+        o.textContent = `Target: ${c.calyces[o.value].label} (${c.calyces[o.value].reachPct}% reach${isBest})`;
       }
     });
   }
 
-  // Update Top-Bar Case Brief & Calyx Note Strip (right beside Case & Target!)
   const topStrip = document.getElementById('topBriefStrip');
   if (topStrip) {
     const isOptimalCalyx = state.targetKey === c.defaultCalyx;
@@ -846,15 +833,34 @@ function updateDiagnosticsAndCoach() {
     `;
   }
 
-  const pbSteps = (c.profPlaybook && c.profPlaybook.steps) ? c.profPlaybook.steps : [];
+  // DYNAMIC PER-CALYX & PER-TECHNIQUE STEP-BY-STEP GUIDE
+  const respText = opt.respMode === 'exp' ? 'Exp Hold (Supracostal Safety)' : 'Insp Hold';
+  const extraAction = state.caseIdx === 4 ? ' & click [5mL Air Bolus]' : (state.caseIdx === 9 ? ' & click [Saline Distend]' : '');
+  const dynamicSteps = state.coachMode === 'hybrid' ? [
+    `1. Lock [Resp: ${respText}]${extraAction}.`,
+    `2. On [0° AP], set Point B at L=${opt.latCm.toFixed(1)}cm, CC=${opt.ccCm >= 0 ? '+' : ''}${opt.ccCm.toFixed(1)}cm & Coronal Aim=${opt.corDeg.toFixed(1)}°.`,
+    `3. Rotate C-arm to [+${opt.calyxAxDeg}° Bull's Eye], set Pitch=${opt.pitchDeg.toFixed(1)}°, and cross fascia (${opt.fasciaDepthMm}mm).`,
+    `4. Return to [0° AP], advance to ${opt.tractDistMm}mm (watch cup dimple), and click [Pull Stylet].`
+  ] : (state.coachMode === 'triangulation' ? [
+    `1. Lock [Resp: ${respText}]${extraAction}.`,
+    `2. Plane 1 [0° AP]: Set Point B at L=${opt.latCm.toFixed(1)}cm, CC=${opt.ccCm >= 0 ? '+' : ''}${opt.ccCm.toFixed(1)}cm & Coronal=${opt.corDeg.toFixed(1)}°.`,
+    `3. Plane 2 [+30° Ceph]: Tilt C-arm cephalad, set Pitch=${opt.pitchDeg.toFixed(1)}°, and advance past fascia (${opt.fasciaDepthMm}mm).`,
+    `4. Advance to ${opt.tractDistMm}mm into the papilla and click [Pull Stylet].`
+  ] : [
+    `1. Lock [Resp: ${respText}] & rotate C-arm to [+${opt.calyxAxDeg}° Bull's Eye].`,
+    `2. Set Point B at L=${opt.latCm.toFixed(1)}cm, CC=0.0cm (Coronal=0°) and superimpose hub over tip (Pitch=${opt.pitchDeg.toFixed(1)}°).`,
+    `3. Advance coaxially through the lumbodorsal fascia (${opt.fasciaDepthMm}mm).`,
+    `4. Swing C-arm to [0° AP], advance to ${opt.tractDistMm}mm, and click [Pull Stylet].`
+  ]);
+
   const doneFlags = [
-    state.respMode !== 'tidal',
-    state.visited0AP && d.coronalMismatch <= 10,
-    state.depthMm >= 28 && (state.visited30Ax || state.visited30Ob),
+    state.respMode === opt.respMode,
+    Math.hypot(state.latCm - opt.latCm, state.ccCm - opt.ccCm) <= 0.6 && Math.abs(state.corDeg - opt.corDeg) <= 8,
+    state.depthMm >= 28 && Math.abs(state.pitchDeg - opt.pitchDeg) <= 3.5,
     state.styletPulled && d.inTarget
   ];
   let curFound = false;
-  document.getElementById('coachList').innerHTML = pbSteps.map((txt, i) => {
+  document.getElementById('coachList').innerHTML = dynamicSteps.map((txt, i) => {
     let cls = 'coach-item', sym = '[ ]';
     if (doneFlags[i]) { cls += ' done'; sym = '[✓]'; }
     else if (!curFound) { cls += ' active'; sym = '[→]'; curFound = true; }
@@ -863,12 +869,12 @@ function updateDiagnosticsAndCoach() {
 
   const hintEl = document.getElementById('liveHintBox');
   if (hintEl) {
-    if (state.respMode === 'tidal') {
-      hintEl.innerHTML = `<b>💡 Hint:</b> Click <b>[Resp]</b> to lock breathing (${cal.supracostal ? '<b>Exp Hold</b> for supracostal' : '<b>Insp Hold</b> for subcostal'}) before puncturing.`;
+    if (state.respMode !== opt.respMode) {
+      hintEl.innerHTML = `<b>💡 Hint:</b> Click <b>[Resp]</b> until locked in <b>${respText}</b> before puncturing.`;
     } else if (state.depthMm < 5) {
-      hintEl.innerHTML = `<b>💡 Hint (At Skin 0mm):</b> On <b>[0° AP]</b>, align Point B and Coronal Aim with the target infundibular neck.`;
+      hintEl.innerHTML = `<b>💡 Hint (At Skin 0mm):</b> Align Point B and Coronal Aim on <b>[0° AP]</b> (or click <i>2. Snap Optimal Point B</i> on the Flank Map).`;
     } else if (state.depthMm >= 25 && state.depthMm <= 45 && Math.abs(state.cArmOb) < 10 && Math.abs(state.cArmAx) < 15) {
-      hintEl.innerHTML = `<b>💡 Hint (~${Math.round(state.depthMm)}mm):</b> You've crossed the fascia! Switch C-arm to <b>[30° Ceph]</b> or <b>[30° Bull's Eye]</b> to check your depth Pitch.`;
+      hintEl.innerHTML = `<b>💡 Hint (~${Math.round(state.depthMm)}mm):</b> You've crossed the fascia! Switch C-arm to <b>${state.coachMode === 'triangulation' ? '[30° Ceph]' : '[30° Bull\'s Eye]'}</b> to check your depth Pitch.`;
     } else if (state.depthMm > 45 && !state.styletPulled) {
       hintEl.innerHTML = `<b>💡 Hint (${Math.round(state.depthMm)}mm):</b> Watch the contrast cup on <b>[0° AP]</b> for subtle dimpling. Retract &lt;35mm before redirecting! When ready, click <b>💧 Pull Stylet</b>.`;
     }
