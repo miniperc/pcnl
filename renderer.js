@@ -1,20 +1,10 @@
 // ============================================================================
-// FILE: renderer.js — v7.8 TRUE SALINE HYDRO-DISTENSION & C-ARM PATHOLOGY ENGINE
+// FILE: renderer.js — CLEAN PROPORTIONAL PYELOGRAM & AXIAL CT RENDERER
 // ============================================================================
 const _origGetLiveAnatomy = window.getLiveAnatomy;
 if (typeof _origGetLiveAnatomy === 'function') {
   window.getLiveAnatomy = function () {
     const live = _origGetLiveAnatomy();
-
-    // Enhance Saline Distension (Hydro): visibly balloons calyceal cups (+4.2mm total) & necks (+2.6mm)
-    if (state.hydro) {
-      Object.keys(live.calyces).forEach(k => {
-        live.calyces[k].cupR += 2.0; // Adds to physics.js +2.2mm = +4.2mm total ballooning!
-        live.calyces[k].neckW += 2.6;
-      });
-      live.targetCalyx = live.calyces[state.targetKey];
-    }
-
     // Case 10: Hypermobile kidney tents away if Saline Distend (hydro) is OFF
     if (state.caseIdx === 9 && state.depthMm > 45 && !state.hydro) {
       const ng = getNeedle3D();
@@ -72,7 +62,7 @@ function loop(now) {
 }
 
 // ----------------------------------------------------------------------------
-// 1. C-ARM FLUOROSCOPY (WITH VISIBLE SALINE BALLOONING & COLONIC GAS)
+// 1. C-ARM FLUOROSCOPY (PROPORTIONAL PYELOGRAM + COLONIC GAS)
 // ----------------------------------------------------------------------------
 function drawFluoroBuffer(ctx, w, h) {
   ctx.save();
@@ -88,6 +78,7 @@ function drawFluoroBuffer(ctx, w, h) {
 
   const vig = ctx.createRadialGradient(cx, cy, rad * 0.35, cx, cy, rad);
   vig.addColorStop(0, 'rgba(235, 240, 246, 0.25)');
+  vig.addColorStop(1, 'rgba(62, 73, 90, 0.74)');
   vig.addColorStop(1, 'rgba(62, 73, 90, 0.74)');
   ctx.fillStyle = vig;
   ctx.fillRect(0, 0, w, h);
@@ -143,7 +134,7 @@ function drawFluoroBuffer(ctx, w, h) {
   if (c.stoneType === 'horseshoe') {
     const isth1 = proj({ x: 12, y: -24, z: 82 });
     const isth2 = proj({ x: 66, y: -18, z: 76 });
-    ctx.beginPath(); moveTo(isth1.x, isth1.y); ctx.lineTo(isth2.x, isth2.y);
+    ctx.beginPath(); ctx.moveTo(isth1.x, isth1.y); ctx.lineTo(isth2.x, isth2.y);
     ctx.lineWidth = 22 * scale; ctx.strokeStyle = 'rgba(100, 116, 139, 0.28)'; ctx.lineCap = 'round'; ctx.stroke();
   }
 
@@ -164,13 +155,13 @@ function drawFluoroBuffer(ctx, w, h) {
   const u2 = proj(c.pelvis);
   ctx.beginPath(); ctx.moveTo(u1.x, u1.y);
   ctx.quadraticCurveTo(u1.x + (c.stoneType === 'horseshoe' ? 18 : 7) * scale, (u1.y + u2.y) / 2, u2.x, u2.y);
-  ctx.lineWidth = (state.hydro ? 3.2 : 2.2) * scale;
-  ctx.strokeStyle = '#1e293b'; ctx.stroke();
+  ctx.lineWidth = 2.2 * scale; ctx.strokeStyle = '#1e293b'; ctx.stroke();
 
   const pPel = proj(c.pelvis);
   const drawCalyx = (cal, isPost, isSelectedTarget) => {
     const pCal = proj(cal);
-    const nw = (cal.neckW || 8) * scale;
+    // Clean, proportional distension (+1mm neck, +2.2mm cupR from physics.js)
+    const nw = ((cal.neckW || 8) + (state.hydro ? 1.0 : 0)) * scale;
     const cr = (cal.cupR || 7.5) * scale;
 
     if (cal.isDiverticulum && !state.hydro) return;
@@ -184,9 +175,7 @@ function drawFluoroBuffer(ctx, w, h) {
     }
     ctx.lineTo(pCal.x, pCal.y);
     ctx.lineWidth = nw;
-    ctx.strokeStyle = isPost
-      ? (state.hydro ? 'rgba(15, 23, 42, 0.92)' : 'rgba(30, 41, 59, 0.78)')
-      : 'rgba(55, 68, 86, 0.50)';
+    ctx.strokeStyle = isPost ? 'rgba(24, 34, 50, 0.82)' : 'rgba(55, 68, 86, 0.52)';
     ctx.lineCap = 'round';
     ctx.stroke();
 
@@ -197,38 +186,35 @@ function drawFluoroBuffer(ctx, w, h) {
     const dimple = isSelectedTarget ? d.dimpleFactor : 0;
     ctx.scale(1 - dimple * 0.25, 1 + dimple * 0.14);
 
-    // If Saline Distend (hydro) is ON, draw the ballooned calyceal lumen & distended forniceal horns!
-    if (state.hydro && isPost) {
+    // Calyceal Cup & Papillary Fornix
+    ctx.beginPath();
+    ctx.arc(0, 0, cr, -Math.PI * 0.78, Math.PI * 0.78);
+    ctx.lineWidth = cr * 0.82;
+    ctx.strokeStyle = isPost ? 'rgba(18, 26, 40, 0.90)' : 'rgba(51, 65, 85, 0.55)';
+    ctx.stroke();
+
+    // Subtle Target Calyx Papillary Rim (expands with Saline Distend & indents with Dimple!)
+    if (isSelectedTarget) {
       ctx.beginPath();
-      ctx.arc(0, 0, cr * 1.05, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(30, 41, 59, 0.85)';
-      ctx.fill();
-      ctx.lineWidth = 1.6 * scale;
-      ctx.strokeStyle = 'rgba(15, 23, 42, 0.96)';
+      ctx.arc(0, 0, cr + 2.2 * scale, 0, Math.PI * 2);
+      ctx.strokeStyle = 'rgba(2, 132, 199, 0.55)';
+      ctx.lineWidth = 1.4;
       ctx.stroke();
     }
-
-    ctx.beginPath();
-    ctx.arc(0, 0, cr, -Math.PI * 0.80, Math.PI * 0.80);
-    ctx.lineWidth = cr * (state.hydro ? 0.95 : 0.82);
-    ctx.strokeStyle = isPost ? 'rgba(15, 23, 42, 0.92)' : 'rgba(51, 65, 85, 0.55)';
-    ctx.stroke();
     ctx.restore();
 
     if (state.airBolus && isPost) {
       ctx.beginPath();
-      ctx.arc(pCal.x, pCal.y, cr * 0.68, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(248, 250, 252, 0.92)';
+      ctx.arc(pCal.x, pCal.y, cr * 0.65, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(248, 250, 252, 0.90)';
       ctx.fill();
       ctx.lineWidth = 1.2; ctx.strokeStyle = '#334155'; ctx.stroke();
     }
   };
 
-  // Renal Pelvis (visibly balloons by +3.5mm when Saline Distend is active!)
-  const pelRadius = ((c.stoneType === 'bifid' ? 8.5 : 11.5) + (state.hydro ? 3.5 : 0)) * scale;
   ctx.beginPath();
-  ctx.arc(pPel.x, pPel.y, pelRadius, 0, Math.PI * 2);
-  ctx.fillStyle = state.hydro ? 'rgba(15, 23, 42, 0.92)' : 'rgba(24, 34, 50, 0.82)';
+  ctx.arc(pPel.x, pPel.y, ((c.stoneType === 'bifid' ? 8.5 : 11.5) + (state.hydro ? 1.5 : 0)) * scale, 0, Math.PI * 2);
+  ctx.fillStyle = 'rgba(22, 32, 48, 0.86)';
   ctx.fill();
 
   drawCalyx(c.antCalyx, false, false);
@@ -236,12 +222,15 @@ function drawFluoroBuffer(ctx, w, h) {
     drawCalyx(c.calyces[k], true, k === state.targetKey);
   }
 
+  // Draw Calculi (Natural dark radiopaque density without a bright white ring that looks like a calyx)
   const drawStone = (pt, r) => {
     const s = proj(pt);
-    ctx.beginPath(); ctx.arc(s.x, s.y, r * scale, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(8, 12, 20, 0.96)'; ctx.fill();
-    ctx.lineWidth = (state.hydro ? 1.8 : 1.2);
-    ctx.strokeStyle = state.hydro ? '#cbd5e1' : '#94a3b8';
+    ctx.beginPath();
+    ctx.ellipse(s.x, s.y, r * scale, r * 0.82 * scale, 0.3, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(10, 14, 22, 0.94)';
+    ctx.fill();
+    ctx.lineWidth = 1.0;
+    ctx.strokeStyle = 'rgba(100, 116, 139, 0.45)';
     ctx.stroke();
   };
 
@@ -251,15 +240,15 @@ function drawFluoroBuffer(ctx, w, h) {
       if (!c.calyces[k]) return;
       const pC = proj(c.calyces[k]);
       ctx.beginPath(); ctx.moveTo(pPel.x, pPel.y); ctx.lineTo(pC.x, pC.y);
-      ctx.lineWidth = 6.8 * scale; ctx.strokeStyle = 'rgba(10, 15, 24, 0.95)'; ctx.lineCap = 'round'; ctx.stroke();
-      drawStone(c.calyces[k], 5.6);
+      ctx.lineWidth = 6.2 * scale; ctx.strokeStyle = 'rgba(10, 15, 24, 0.94)'; ctx.lineCap = 'round'; ctx.stroke();
+      drawStone(c.calyces[k], 5.2);
     });
-    drawStone(c.pelvis, 9.2);
+    drawStone(c.pelvis, 8.8);
   } else if (c.stoneType === 'diverticulum') {
-    drawStone(c.calyces.middle, 4.8);
+    drawStone(c.calyces.middle, 4.6);
   } else {
-    drawStone(c.pelvis, 8.2);
-    drawStone(c.targetCalyx, 5.4);
+    drawStone(c.pelvis, 7.8);
+    drawStone(c.targetCalyx, 5.0);
   }
 
   state.blushClouds.forEach(bl => {
@@ -448,7 +437,7 @@ function drawAnatomyBench(ctx, w, h) {
   ctx.lineWidth = Math.max(3, c.targetCalyx.neckW * 0.75 * scale);
   ctx.strokeStyle = '#0284c7'; ctx.lineCap = 'round'; ctx.stroke();
 
-  ctx.beginPath(); ctx.arc(pPel.x, pPel.y, (state.hydro ? 9.5 : 7) * scale, 0, Math.PI * 2);
+  ctx.beginPath(); ctx.arc(pPel.x, pPel.y, (state.hydro ? 8.5 : 7) * scale, 0, Math.PI * 2);
   ctx.fillStyle = '#0369a1'; ctx.fill();
 
   ctx.beginPath(); ctx.arc(pPost.x, pPost.y, c.targetCalyx.cupR * scale, 0, Math.PI * 2);
