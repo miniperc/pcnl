@@ -1,5 +1,5 @@
 // ============================================================================
-// FILE: renderer.js — CLEAN PROPORTIONAL PYELOGRAM & AXIAL CT RENDERER
+// FILE: renderer.js — UNCOVERED TARGET PAPILLA & TRUE SALINE DISTENSION
 // ============================================================================
 const _origGetLiveAnatomy = window.getLiveAnatomy;
 if (typeof _origGetLiveAnatomy === 'function') {
@@ -62,7 +62,7 @@ function loop(now) {
 }
 
 // ----------------------------------------------------------------------------
-// 1. C-ARM FLUOROSCOPY (PROPORTIONAL PYELOGRAM + COLONIC GAS)
+// 1. C-ARM FLUOROSCOPY (UNCOVERED TARGET PAPILLA + COLONIC GAS)
 // ----------------------------------------------------------------------------
 function drawFluoroBuffer(ctx, w, h) {
   ctx.save();
@@ -78,7 +78,6 @@ function drawFluoroBuffer(ctx, w, h) {
 
   const vig = ctx.createRadialGradient(cx, cy, rad * 0.35, cx, cy, rad);
   vig.addColorStop(0, 'rgba(235, 240, 246, 0.25)');
-  vig.addColorStop(1, 'rgba(62, 73, 90, 0.74)');
   vig.addColorStop(1, 'rgba(62, 73, 90, 0.74)');
   ctx.fillStyle = vig;
   ctx.fillRect(0, 0, w, h);
@@ -160,7 +159,6 @@ function drawFluoroBuffer(ctx, w, h) {
   const pPel = proj(c.pelvis);
   const drawCalyx = (cal, isPost, isSelectedTarget) => {
     const pCal = proj(cal);
-    // Clean, proportional distension (+1mm neck, +2.2mm cupR from physics.js)
     const nw = ((cal.neckW || 8) + (state.hydro ? 1.0 : 0)) * scale;
     const cr = (cal.cupR || 7.5) * scale;
 
@@ -186,14 +184,13 @@ function drawFluoroBuffer(ctx, w, h) {
     const dimple = isSelectedTarget ? d.dimpleFactor : 0;
     ctx.scale(1 - dimple * 0.25, 1 + dimple * 0.14);
 
-    // Calyceal Cup & Papillary Fornix
+    // Calyceal Cup & Papillary Fornix (Now 100% uncovered on the Target Calyx too!)
     ctx.beginPath();
     ctx.arc(0, 0, cr, -Math.PI * 0.78, Math.PI * 0.78);
     ctx.lineWidth = cr * 0.82;
     ctx.strokeStyle = isPost ? 'rgba(18, 26, 40, 0.90)' : 'rgba(51, 65, 85, 0.55)';
     ctx.stroke();
 
-    // Subtle Target Calyx Papillary Rim (expands with Saline Distend & indents with Dimple!)
     if (isSelectedTarget) {
       ctx.beginPath();
       ctx.arc(0, 0, cr + 2.2 * scale, 0, Math.PI * 2);
@@ -222,7 +219,7 @@ function drawFluoroBuffer(ctx, w, h) {
     drawCalyx(c.calyces[k], true, k === state.targetKey);
   }
 
-  // Draw Calculi (Natural dark radiopaque density without a bright white ring that looks like a calyx)
+  // Draw Calculi: Keep stones in the renal pelvis / proximal infundibulum so they NEVER blot out the target papilla!
   const drawStone = (pt, r) => {
     const s = proj(pt);
     ctx.beginPath();
@@ -238,17 +235,23 @@ function drawFluoroBuffer(ctx, w, h) {
     const keys = c.stoneType === 'staghorn' ? ['lower_lat', 'middle', 'upper'] : ['upper', 'middle'];
     keys.forEach(k => {
       if (!c.calyces[k]) return;
-      const pC = proj(c.calyces[k]);
-      ctx.beginPath(); ctx.moveTo(pPel.x, pPel.y); ctx.lineTo(pC.x, pC.y);
+      const cal = c.calyces[k];
+      // Stop staghorn branch 45% along the infundibulum so the papillary cup & fornix remain visible!
+      const branchEnd = {
+        x: c.pelvis.x + (cal.x - c.pelvis.x) * 0.58,
+        y: c.pelvis.y + (cal.y - c.pelvis.y) * 0.58,
+        z: c.pelvis.z + (cal.z - c.pelvis.z) * 0.58
+      };
+      const pBEnd = proj(branchEnd);
+      ctx.beginPath(); ctx.moveTo(pPel.x, pPel.y); ctx.lineTo(pBEnd.x, pBEnd.y);
       ctx.lineWidth = 6.2 * scale; ctx.strokeStyle = 'rgba(10, 15, 24, 0.94)'; ctx.lineCap = 'round'; ctx.stroke();
-      drawStone(c.calyces[k], 5.2);
     });
     drawStone(c.pelvis, 8.8);
   } else if (c.stoneType === 'diverticulum') {
-    drawStone(c.calyces.middle, 4.6);
+    // Only in Case 7 (Stone-guided diverticulum) is the stone sitting directly inside the unopacified diverticular cup
+    drawStone(c.calyces.middle, 4.2);
   } else {
-    drawStone(c.pelvis, 7.8);
-    drawStone(c.targetCalyx, 5.0);
+    drawStone(c.pelvis, 8.0);
   }
 
   state.blushClouds.forEach(bl => {
